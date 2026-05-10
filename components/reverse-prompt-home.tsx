@@ -18,7 +18,10 @@ const GITREVERSE_HISTORY_MAX = 20;
 const HISTORY_PROMPT_PREVIEW_LEN = 160;
 
 const RL_KEY_MONTHLY = "gr_rl_monthly";
-const MONTHLY_CUSTOM_LIMIT = 1;
+const MONTHLY_CUSTOM_LIMIT = Math.max(
+  0,
+  parseInt(process.env.NEXT_PUBLIC_FREE_TIER_CUSTOM_LIMIT ?? "1", 10)
+);
 const SUBSCRIBER_EMAIL_KEY = "gr_subscriber_email";
 const PENDING_REDIRECT_KEY = "gr_pending_redirect";
 const CHECKOUT_NAVIGATION_STATE_KEY = "gr_checkout_navigation_state";
@@ -1153,9 +1156,18 @@ export function ReversePromptHome({
                   role="alert"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      You&apos;ve hit this month&apos;s limit.
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-zinc-900">
+                        {MONTHLY_CUSTOM_LIMIT === 0
+                          ? "Deep Reverse and Manual Control are for paid subscribers only."
+                          : "You've hit this month's limit."}
+                      </p>
+                      {MONTHLY_CUSTOM_LIMIT === 0 ? (
+                        <p className="mt-1 text-xs text-zinc-600">
+                          We don&apos;t have capacity to offer free runs right now.
+                        </p>
+                      ) : null}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {PAYMENT_LINK ? (
                         <Link

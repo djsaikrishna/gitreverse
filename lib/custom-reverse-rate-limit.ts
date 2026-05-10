@@ -4,7 +4,10 @@ import { getSupabase } from "@/lib/supabase";
 import { checkActiveSubscriber } from "@/lib/subscriber";
 import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
 
-const MONTHLY_LIMIT = 1;
+const MONTHLY_LIMIT = Math.max(
+  0,
+  parseInt(process.env.FREE_TIER_CUSTOM_LIMIT ?? "1", 10)
+);
 const RATE_LIMIT_RPC_TIMEOUT_MS = 2500;
 
 /** Skip DB-backed limits while developing locally or when explicitly opted out. */
