@@ -51,7 +51,7 @@ CUSTOM_REVERSE_SERVICE_URL=http://localhost:3001
 |---|---|
 | `/` | Home — quick and custom reverse |
 | `/library` | Browse cached quick prompts (requires Supabase) |
-| `/history` | Recent repos from localStorage |
+| `/history` | Your prompt history (profile menu when signed in; syncs to Supabase) |
 | `/[owner]/[repo]` | Shareable quick-reverse link |
 | `/[owner]/[repo]/deep` | Shareable deep-reverse link |
 | `/[owner]/[repo]/[focus]` | Shareable manual-focus link |
