@@ -108,26 +108,6 @@ function IconLogOut({ size = 15 }: { size?: number }) {
   );
 }
 
-function IconXCircle({ size = 15 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
-}
-
 const SUBSCRIBER_EMAIL_KEY = "gr_subscriber_email";
 const CANCEL_REASON_MIN_LEN = 10;
 
@@ -172,7 +152,10 @@ export type NavbarProps = {
 
 function NavDivider() {
   return (
-    <div className="mx-1 h-6 w-px shrink-0 bg-zinc-200" aria-hidden />
+    <div
+      className="mx-1 hidden h-6 w-px shrink-0 bg-zinc-200 sm:block"
+      aria-hidden
+    />
   );
 }
 
@@ -245,10 +228,11 @@ function PremiumButton({ isSubscriber }: { isSubscriber: boolean }) {
           aria-hidden
         />
         <span
-          className={`relative inline-flex items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-3.5 py-1.5 text-sm font-bold text-zinc-900`}
+          aria-label="Premium"
+          className="relative inline-flex items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 sm:px-3.5"
         >
           <IconPremiumBadge size={17} />
-          Premium
+          <span className="hidden sm:inline">Premium</span>
         </span>
       </span>
     );
@@ -263,12 +247,13 @@ function PremiumButton({ isSubscriber }: { isSubscriber: boolean }) {
       />
       <Link
         href="/premium"
+        aria-label="Premium"
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
-        className={`relative inline-flex cursor-pointer items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-3.5 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 ${btnShift}`}
+        className={`relative inline-flex cursor-pointer items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 sm:px-3.5 ${btnShift}`}
       >
         <IconPremiumBadge size={17} />
-        Premium
+        <span className="hidden sm:inline">Premium</span>
       </Link>
     </span>
   );
@@ -422,30 +407,23 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
   return (
     <>
       <nav className="sticky top-0 z-50 border-b-[3px] border-zinc-900 bg-[#FFFDF8]">
-      <div className="mx-auto flex h-16 max-w-4xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-4xl items-center justify-between gap-1.5 px-3 sm:gap-3 sm:px-6">
         <Link
           href="/"
-          className="shrink-0 text-xl font-bold tracking-tight transition-transform hover:-translate-y-0.5"
+          className="shrink-0 text-lg font-bold tracking-tight transition-transform hover:-translate-y-0.5 sm:text-xl"
           aria-label="GitReverse home"
         >
           <span className="text-zinc-900">Git</span>
           <span className="text-[#d31611]">Reverse</span>
         </Link>
 
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-2">
+        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
           <IconLinkWithTooltip
             href="/library"
             label="Library"
             isActive={pathname === "/library"}
           >
             <IconBooks />
-          </IconLinkWithTooltip>
-          <IconLinkWithTooltip
-            href="/history"
-            label="History"
-            isActive={pathname === "/history"}
-          >
-            <IconClock />
           </IconLinkWithTooltip>
 
           <NavDivider />
@@ -505,11 +483,20 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
                           </span>
                         ) : null}
                       </div>
+                      <Link
+                        href="/history"
+                        role="menuitem"
+                        className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <IconClock />
+                        History
+                      </Link>
                       {isSubscriber ? (
                         <button
                           type="button"
                           role="menuitem"
-                          className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-[#d31611] hover:bg-zinc-50"
+                          className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
                           onClick={() => {
                             setMenuOpen(false);
                             setCancelOpen(true);
@@ -518,8 +505,8 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
                             setCancelSuccess(false);
                           }}
                         >
-                          <IconXCircle />
-                          Cancel subscription
+                          <IconPremiumBadge size={15} />
+                          Subscription
                         </button>
                       ) : null}
                       <button
@@ -542,7 +529,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
               <button
                 type="button"
                 onClick={() => void handleSignIn()}
-                className="shrink-0 rounded-md border-[2.5px] border-zinc-900 bg-white px-3 py-1.5 text-sm font-bold text-zinc-900 hover:bg-zinc-50"
+                className="shrink-0 rounded-md border-[2.5px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-bold text-zinc-900 hover:bg-zinc-50 sm:px-3 sm:text-sm"
               >
                 Sign in
               </button>

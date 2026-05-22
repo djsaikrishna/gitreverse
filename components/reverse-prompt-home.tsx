@@ -12,10 +12,15 @@ import { HOME_EXAMPLES } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
 import { PAYMENT_LINK, saveReturnPath } from "@/lib/stripe-checkout-navigate";
 import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
-
-const GITREVERSE_HISTORY_KEY = "gitreverse_history";
-const GITREVERSE_HISTORY_MAX = 20;
-const HISTORY_PROMPT_PREVIEW_LEN = 160;
+import {
+  type HistoryEntry,
+  historyPromptPreview,
+  historySlotOf,
+  migrateLocalHistoryToServer,
+  readLocalHistory,
+  syncHistoryEntry,
+  writeLocalHistory,
+} from "@/lib/user-history";
 
 const RL_KEY_MONTHLY = "gr_rl_monthly";
 const MONTHLY_CUSTOM_LIMIT = 1;
@@ -96,17 +101,6 @@ function incrementRLEntry(key: string): void {
   );
 }
 
-function historyPromptPreview(text: string): string {
-  const t = text.trim().replace(/\s+/g, " ");
-  if (t.length <= HISTORY_PROMPT_PREVIEW_LEN) return t;
-  return `${t.slice(0, HISTORY_PROMPT_PREVIEW_LEN).trimEnd()}…`;
-}
-
-/** Stable row id: `quick`, `deep`, or `m:${trimmedFocus}` (manual). */
-function historySlotOf(e: { historySlot?: string }): string {
-  return e.historySlot ?? "quick";
-}
-
 function historySlotFromProps(
   preserveUrl: boolean,
   autoSubmitDeep: boolean,
@@ -134,17 +128,6 @@ function historySlotFromGenerationState(
   if (kind === "manual") return `m:${manualFocus?.trim() ?? ""}`;
   return "quick";
 }
-
-type GitreverseHistoryEntry = {
-  owner: string;
-  repo: string;
-  visitedAt: string;
-  /** Distinguishes quick vs deep vs manual rows for the same repo. */
-  historySlot?: string;
-  promptPreview?: string;
-  lastGenerationType?: "quick" | "deep" | "manual";
-  lastManualFocus?: string;
-};
 
 type ReversePromptHomeProps = {
   initialRepoInput?: string;
@@ -822,16 +805,7 @@ export function ReversePromptHome({
     if (!o || !r || !p) return;
 
     const preview = historyPromptPreview(p);
-    const raw = localStorage.getItem(GITREVERSE_HISTORY_KEY);
-    let arr: GitreverseHistoryEntry[] = [];
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as unknown;
-        arr = Array.isArray(parsed) ? (parsed as GitreverseHistoryEntry[]) : [];
-      } catch {
-        return;
-      }
-    }
+    const arr: HistoryEntry[] = readLocalHistory();
     const slot =
       historySlotFromGenerationState(lastGenerationKind, lastManualFocus) ??
       historySlotFromProps(
@@ -852,8 +826,10 @@ export function ReversePromptHome({
         ? lastManualFocus.trim()
         : undefined;
 
+    let entry: HistoryEntry;
+
     if (idx === -1) {
-      arr.unshift({
+      entry = {
         owner: o,
         repo: r,
         historySlot: slot,
@@ -861,28 +837,32 @@ export function ReversePromptHome({
         promptPreview: preview,
         ...(gen != null ? { lastGenerationType: gen } : {}),
         lastManualFocus: focusMeta,
-      });
-      localStorage.setItem(
-        GITREVERSE_HISTORY_KEY,
-        JSON.stringify(arr.slice(0, GITREVERSE_HISTORY_MAX))
-      );
-      return;
+      };
+      arr.unshift(entry);
+      writeLocalHistory(arr);
+    } else {
+      const cur = arr[idx];
+      const samePreview = cur.promptPreview === preview;
+      const sameGen = cur.lastGenerationType === gen;
+      const sameFocus = cur.lastManualFocus === focusMeta;
+      if (samePreview && sameGen && sameFocus) return;
+
+      entry = {
+        ...cur,
+        historySlot: slot,
+        visitedAt: new Date().toISOString(),
+        promptPreview: preview,
+        ...(gen != null ? { lastGenerationType: gen } : {}),
+        lastManualFocus: focusMeta,
+      };
+      arr[idx] = entry;
+      writeLocalHistory(arr);
     }
 
-    const cur = arr[idx];
-    const samePreview = cur.promptPreview === preview;
-    const sameGen = cur.lastGenerationType === gen;
-    const sameFocus = cur.lastManualFocus === focusMeta;
-    if (samePreview && sameGen && sameFocus) return;
-
-    arr[idx] = {
-      ...cur,
-      historySlot: slot,
-      promptPreview: preview,
-      ...(gen != null ? { lastGenerationType: gen } : {}),
-      lastManualFocus: focusMeta,
-    };
-    localStorage.setItem(GITREVERSE_HISTORY_KEY, JSON.stringify(arr));
+    const token = session?.access_token;
+    if (token) {
+      void syncHistoryEntry(token, entry).catch(() => {});
+    }
   }, [
     owner,
     repo,
@@ -894,7 +874,16 @@ export function ReversePromptHome({
     autoSubmitFocus,
     initialManualFocus,
     initialGenerationKind,
+    session?.access_token,
   ]);
+
+  const historyMigratedRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated || !session?.access_token) return;
+    if (historyMigratedRef.current) return;
+    historyMigratedRef.current = true;
+    void migrateLocalHistoryToServer(session.access_token).catch(() => {});
+  }, [isAuthenticated, session?.access_token]);
 
   useEffect(() => {
     if (!prompt) return;
