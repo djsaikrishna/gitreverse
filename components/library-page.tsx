@@ -12,7 +12,10 @@ type PromptEntry = {
   prompt: string;
   cached_at: string;
   views?: number;
+  relevance_score?: number;
 };
+
+type SearchStrategy = "browse" | "hybrid" | "fts-plain" | "fts-or" | "ilike-and" | "ilike-or";
 
 type SortOption = "trending" | "newest" | "oldest";
 
@@ -50,6 +53,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [sort, setSort] = useState<SortOption>("newest");
   const [entries, setEntries] = useState<PromptEntry[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
+  const [strategy, setStrategy] = useState<SearchStrategy>("browse");
   const [page, setPage] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
@@ -73,13 +77,18 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
         cache: "no-store",
       });
       if (!res.ok) return;
-      const json = (await res.json()) as { data: PromptEntry[]; total: number };
+      const json = (await res.json()) as {
+        data: PromptEntry[];
+        total: number;
+        strategy?: SearchStrategy;
+      };
       if (append) {
         setEntries((prev) => [...prev, ...json.data]);
       } else {
         setEntries(json.data);
       }
       setTotal(json.total);
+      setStrategy(json.strategy ?? (searchVal ? "hybrid" : "browse"));
       setPage(pageVal);
     },
     []
@@ -193,32 +202,41 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
             </div>
           </div>
 
-          {/* Sort */}
-          <div className="relative shrink-0">
-            <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg bg-zinc-900" />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortOption)}
-              className="relative z-10 w-full cursor-pointer appearance-none rounded-lg border-[3px] border-zinc-900 bg-[#fff4da] px-4 py-3 pr-10 text-sm font-semibold text-zinc-900 focus:outline-none sm:w-auto"
-            >
-              {SORT_OPTIONS.map((val) => (
-                <option key={val} value={val}>
-                  {SORT_LABELS[val]}
-                </option>
-              ))}
-            </select>
-            <svg
-              className="pointer-events-none absolute right-3 top-1/2 z-20 h-4 w-4 -translate-y-1/2 text-zinc-700"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-            </svg>
-          </div>
+          {/* Sort — only when browsing, not searching */}
+          {!search.trim() ? (
+            <div className="relative shrink-0">
+              <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg bg-zinc-900" />
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortOption)}
+                className="relative z-10 w-full cursor-pointer appearance-none rounded-lg border-[3px] border-zinc-900 bg-[#fff4da] px-4 py-3 pr-10 text-sm font-semibold text-zinc-900 focus:outline-none sm:w-auto"
+              >
+                {SORT_OPTIONS.map((val) => (
+                  <option key={val} value={val}>
+                    {SORT_LABELS[val]}
+                  </option>
+                ))}
+              </select>
+              <svg
+                className="pointer-events-none absolute right-3 top-1/2 z-20 h-4 w-4 -translate-y-1/2 text-zinc-700"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+              </svg>
+            </div>
+          ) : (
+            <div className="relative shrink-0">
+              <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg bg-zinc-900" />
+              <div className="relative z-10 rounded-lg border-[3px] border-zinc-900 bg-[#fff4da] px-4 py-3 text-sm font-semibold text-zinc-900 sm:w-auto">
+                Sorted by relevance
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Count line */}
@@ -229,6 +247,14 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
                 {total.toLocaleString()}
               </span>{" "}
               result{total !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
+              {strategy && (
+                <>
+                  {" "}
+                  <span className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-zinc-600">
+                    {strategy}
+                  </span>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -255,7 +281,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {entries.map((entry) => (
-              <PromptCard key={entry.id} entry={entry} />
+              <PromptCard key={entry.id} entry={entry} showRelevance={Boolean(search.trim())} />
             ))}
           </div>
         )}
@@ -327,7 +353,13 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   );
 }
 
-function PromptCard({ entry }: { entry: PromptEntry }) {
+function PromptCard({
+  entry,
+  showRelevance = false,
+}: {
+  entry: PromptEntry;
+  showRelevance?: boolean;
+}) {
   const router = useRouter();
   const href = `/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repo)}`;
   const truncated =
@@ -374,11 +406,17 @@ function PromptCard({ entry }: { entry: PromptEntry }) {
         <p className="flex-1 text-sm leading-relaxed text-zinc-600">{truncated}</p>
 
         {/* Footer */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
             {relativeTime(entry.cached_at)}
           </span>
-          <span className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
+          <div className="flex items-center gap-2">
+            {showRelevance && typeof entry.relevance_score === "number" && (
+              <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                {Math.round(entry.relevance_score * 100)}% match
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
             <svg
               className="h-3.5 w-3.5 shrink-0 text-zinc-400"
               xmlns="http://www.w3.org/2000/svg"
@@ -395,7 +433,8 @@ function PromptCard({ entry }: { entry: PromptEntry }) {
             </svg>
             {(entry.views ?? 0).toLocaleString()}{" "}
             {(entry.views ?? 0) === 1 ? "view" : "views"}
-          </span>
+            </span>
+          </div>
         </div>
       </div>
     </div>
