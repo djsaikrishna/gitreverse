@@ -397,9 +397,9 @@ function PromptCard({ entry }: { entry: PromptEntry }) {
       <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-xl bg-zinc-900 transition-transform group-hover:translate-x-2 group-hover:translate-y-2" />
       <div className="relative z-10 flex h-full flex-col gap-3 rounded-xl border-[3px] border-zinc-900 bg-white p-4 transition-transform group-hover:-translate-x-0.5 group-hover:-translate-y-0.5">
         {/* Header */}
-        <p className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
+        <h3 className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
           {displayTitle}
-        </p>
+        </h3>
 
         {/* Prompt preview */}
         <p className="flex-1 text-sm leading-relaxed text-zinc-600">{truncated}</p>

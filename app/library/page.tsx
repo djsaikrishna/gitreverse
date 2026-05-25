@@ -1,13 +1,28 @@
+import type { Metadata } from "next";
 import { connection } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { LibraryPage } from "@/components/library-page";
+import { JsonLd } from "@/components/json-ld";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Prompt Library — GitReverse",
+export const metadata: Metadata = {
+  title: "Prompt Library",
   description:
-    "Browse 1,000+ reverse-engineered prompts from real GitHub repositories.",
+    "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
+  alternates: { canonical: "https://gitreverse.com/library" },
+  openGraph: {
+    title: "Prompt Library — GitReverse",
+    description:
+      "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
+    url: "https://gitreverse.com/library",
+    type: "website",
+  },
+  twitter: {
+    title: "Prompt Library — GitReverse",
+    description:
+      "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
+  },
 };
 
 const INITIAL_LIMIT = 24;
@@ -38,5 +53,25 @@ export default async function LibraryRoute() {
     initialTotal = count ?? 0;
   }
 
-  return <LibraryPage initialData={initialData} initialTotal={initialTotal} />;
+  const collectionJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "Prompt Library — GitReverse",
+    description:
+      "Browse reverse-engineered coding agent prompts from real GitHub repositories.",
+    url: "https://gitreverse.com/library",
+    numberOfItems: initialTotal,
+    hasPart: initialData.slice(0, 10).map((entry) => ({
+      "@type": "TechArticle",
+      name: entry.title?.trim() || `${entry.owner}/${entry.repo}`,
+      url: `https://gitreverse.com/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repo)}`,
+    })),
+  };
+
+  return (
+    <>
+      <JsonLd data={collectionJsonLd} />
+      <LibraryPage initialData={initialData} initialTotal={initialTotal} />
+    </>
+  );
 }

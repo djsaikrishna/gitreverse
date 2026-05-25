@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { connection } from "next/server";
 import { ReversePromptHome } from "@/components/reverse-prompt-home";
 import { DEEP_REVERSE_FOCUS, focusFingerprint } from "@/lib/focus-fingerprint";
@@ -8,6 +10,45 @@ import { getSupabase } from "@/lib/supabase";
 type PageProps = {
   params: Promise<{ owner: string; repo: string }>;
 };
+
+const getDeepCachedPrompt = cache(async (owner: string, repoNorm: string) => {
+  try {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+    const fp = focusFingerprint(DEEP_REVERSE_FOCUS);
+    const { data } = await supabase
+      .from("custom_prompt_cache")
+      .select("prompt")
+      .eq("owner", owner)
+      .eq("repo", repoNorm)
+      .eq("focus_fingerprint", fp)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
+});
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { owner: ownerRaw, repo: repoRaw } = await params;
+  const owner = decodeURIComponent(ownerRaw);
+  const repoNorm = normalizeRepoSegment(decodeURIComponent(repoRaw));
+
+  const data = await getDeepCachedPrompt(owner, repoNorm);
+  const pageTitle = `Deep reverse — ${owner}/${repoNorm}`;
+  const pageDesc = data?.prompt
+    ? (data.prompt as string).slice(0, 160).trimEnd() + "…"
+    : `Deep reverse-engineered coding agent prompt for ${owner}/${repoNorm}.`;
+  const url = `https://gitreverse.com/${owner}/${repoNorm}/deep`;
+
+  return {
+    title: pageTitle,
+    description: pageDesc,
+    alternates: { canonical: url },
+    openGraph: { title: pageTitle, description: pageDesc, url, type: "article" },
+    twitter: { title: pageTitle, description: pageDesc },
+  };
+}
 
 export default async function RepoDeepPage({ params }: PageProps) {
   await connection();
@@ -21,26 +62,9 @@ export default async function RepoDeepPage({ params }: PageProps) {
 
   const repoNorm = normalizeRepoSegment(repo);
   const initialRepoInput = `${owner}/${repoNorm}`;
-  const fp = focusFingerprint(DEEP_REVERSE_FOCUS);
 
-  let cachedPrompt: string | undefined;
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data } = await supabase
-        .from("custom_prompt_cache")
-        .select("prompt")
-        .eq("owner", owner)
-        .eq("repo", repoNorm)
-        .eq("focus_fingerprint", fp)
-        .maybeSingle();
-      if (data?.prompt) {
-        cachedPrompt = data.prompt as string;
-      }
-    }
-  } catch {
-    // fall back to client auto-submit
-  }
+  const data = await getDeepCachedPrompt(owner, repoNorm);
+  const cachedPrompt = data?.prompt ? (data.prompt as string) : undefined;
 
   return (
     <ReversePromptHome
