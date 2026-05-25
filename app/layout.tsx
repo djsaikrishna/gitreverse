@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://gitreverse.com"),
   title: {
     default: "GitReverse",
-    template: "%s — GitReverse",
+    template: "%s | GitReverse",
   },
   description:
     "Reverse engineer any GitHub repository into a plain-language coding agent prompt you can build from.",

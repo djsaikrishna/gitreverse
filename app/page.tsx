@@ -3,18 +3,18 @@ import { ReversePromptHome } from "@/components/reverse-prompt-home";
 import { JsonLd } from "@/components/json-ld";
 
 export const metadata: Metadata = {
-  title: "GitReverse — Reverse Engineer Any GitHub Repo into a Prompt",
+  title: "GitReverse",
   description:
     "Steal any code and make it your own. Paste a GitHub URL and get a plain-language coding agent prompt you can build from.",
   alternates: { canonical: "https://gitreverse.com" },
   openGraph: {
-    title: "GitReverse — Reverse Engineer Any GitHub Repo into a Prompt",
+    title: "GitReverse",
     description:
       "Steal any code and make it your own. Paste a GitHub URL and get a plain-language coding agent prompt you can build from.",
     url: "https://gitreverse.com",
   },
   twitter: {
-    title: "GitReverse — Reverse Engineer Any GitHub Repo into a Prompt",
+    title: "GitReverse",
     description:
       "Steal any code and make it your own. Paste a GitHub URL and get a plain-language coding agent prompt you can build from.",
   },

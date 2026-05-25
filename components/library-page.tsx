@@ -15,8 +15,6 @@ type PromptEntry = {
   relevance_score?: number;
 };
 
-type SearchStrategy = "browse" | "hybrid" | "fts-plain" | "fts-or" | "ilike-and" | "ilike-or";
-
 type SortOption = "trending" | "newest" | "oldest";
 
 const SORT_OPTIONS: SortOption[] = ["newest", "trending", "oldest"];
@@ -53,7 +51,6 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [sort, setSort] = useState<SortOption>("newest");
   const [entries, setEntries] = useState<PromptEntry[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
-  const [strategy, setStrategy] = useState<SearchStrategy>("browse");
   const [page, setPage] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
@@ -81,7 +78,6 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
       const json = (await res.json()) as {
         data: PromptEntry[];
         total: number;
-        strategy?: SearchStrategy;
       };
       if (append) {
         setEntries((prev) => [...prev, ...json.data]);
@@ -89,7 +85,6 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
         setEntries(json.data);
       }
       setTotal(json.total);
-      setStrategy(json.strategy ?? (searchVal ? "hybrid" : "browse"));
       setPage(pageVal);
     },
     []
@@ -250,15 +245,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
             <span className="font-semibold text-zinc-900">
               {total.toLocaleString()}
             </span>{" "}
-            result{total !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
-            {strategy && (
-              <>
-                {" "}
-                <span className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-zinc-600">
-                  {strategy}
-                </span>
-              </>
-            )}
+            result{total !== 1 ? "s" : ""}
           </p>
         ) : null}
 
