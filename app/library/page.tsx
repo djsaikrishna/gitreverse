@@ -11,7 +11,6 @@ export const metadata = {
 };
 
 const INITIAL_LIMIT = 24;
-const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function LibraryRoute() {
   await connection();
@@ -32,8 +31,6 @@ export default async function LibraryRoute() {
     const { data, count } = await supabase
       .from("prompt_cache")
       .select("id, owner, repo, prompt, cached_at, views, title", { count: "exact" })
-      .gte("cached_at", new Date(Date.now() - TRENDING_WINDOW_MS).toISOString())
-      .order("views", { ascending: false })
       .order("cached_at", { ascending: false })
       .range(0, INITIAL_LIMIT - 1);
 

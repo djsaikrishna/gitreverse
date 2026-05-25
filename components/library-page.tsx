@@ -50,7 +50,7 @@ type LibraryPageProps = {
 
 export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortOption>("trending");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [entries, setEntries] = useState<PromptEntry[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
   const [strategy, setStrategy] = useState<SearchStrategy>("browse");
@@ -116,7 +116,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   // RSC/router cache when returning from a repo page.
   useEffect(() => {
     startTransition(() => {
-      void fetchPage("", "trending", 0, false).then(() => {
+      void fetchPage("", "newest", 0, false).then(() => {
         setInitialFetchDone(true);
       });
     });
