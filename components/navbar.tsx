@@ -159,84 +159,10 @@ function NavDivider() {
   );
 }
 
-function IconLinkWithTooltip({
-  href,
-  label,
-  children,
-  isActive,
-}: {
-  href: string;
-  label: string;
-  children: React.ReactNode;
-  isActive?: boolean;
-}) {
-  const [showTip, setShowTip] = useState(false);
+function LibraryNavLink({ isActive }: { isActive: boolean }) {
   const [hov, setHov] = useState(false);
   const shadowShift = hov ? "translate(2px,2px)" : "translate(3px,3px)";
   const btnShift = hov ? "-translate-x-px -translate-y-px" : "";
-
-  return (
-    <div
-      className="group relative inline-flex"
-      onMouseEnter={() => {
-        setHov(true);
-        setShowTip(true);
-      }}
-      onMouseLeave={() => {
-        setHov(false);
-        setShowTip(false);
-      }}
-      onFocus={() => setShowTip(true)}
-      onBlur={() => setShowTip(false)}
-    >
-      <span
-        className="pointer-events-none absolute inset-0 rounded-md bg-zinc-900 transition-transform duration-100"
-        style={{ transform: shadowShift }}
-        aria-hidden
-      />
-      <Link
-        href={href}
-        aria-label={label}
-        aria-current={isActive ? "page" : undefined}
-        className={`relative flex h-9 w-9 items-center justify-center rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] text-zinc-900 transition-transform duration-100 ${btnShift} ${isActive ? "ring-2 ring-zinc-400" : ""}`}
-      >
-        {children}
-      </Link>
-      {showTip ? (
-        <div
-          className="pointer-events-none absolute left-1/2 top-full z-[100] mt-2 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-2.5 py-1 text-xs font-semibold text-white"
-          role="tooltip"
-        >
-          {label}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function PremiumButton({ isSubscriber }: { isSubscriber: boolean }) {
-  const [hov, setHov] = useState(false);
-  const shadowShift = hov ? "translate(2px,2px)" : "translate(3px,3px)";
-  const btnShift = hov ? "-translate-x-px -translate-y-px" : "";
-
-  if (isSubscriber) {
-    return (
-      <span className="relative isolate inline-flex">
-        <span
-          className="pointer-events-none absolute inset-0 rounded-md bg-zinc-900"
-          style={{ transform: shadowShift }}
-          aria-hidden
-        />
-        <span
-          aria-label="Premium"
-          className="relative inline-flex items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 sm:px-3.5"
-        >
-          <IconPremiumBadge size={17} />
-          <span className="hidden sm:inline">Premium</span>
-        </span>
-      </span>
-    );
-  }
 
   return (
     <span className="relative isolate inline-flex">
@@ -246,14 +172,15 @@ function PremiumButton({ isSubscriber }: { isSubscriber: boolean }) {
         aria-hidden
       />
       <Link
-        href="/premium"
-        aria-label="Premium"
+        href="/library"
+        aria-label="Library"
+        aria-current={isActive ? "page" : undefined}
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
-        className={`relative inline-flex cursor-pointer items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 sm:px-3.5 ${btnShift}`}
+        className={`relative inline-flex cursor-pointer items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 sm:px-3.5 ${btnShift} ${isActive ? "ring-2 ring-zinc-400" : ""}`}
       >
-        <IconPremiumBadge size={17} />
-        <span className="hidden sm:inline">Premium</span>
+        <IconBooks />
+        <span>Library</span>
       </Link>
     </span>
   );
@@ -418,19 +345,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
         </Link>
 
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
-          <IconLinkWithTooltip
-            href="/library"
-            label="Library"
-            isActive={pathname === "/library"}
-          >
-            <IconBooks />
-          </IconLinkWithTooltip>
-
-          <NavDivider />
-
-          <div className="shrink-0">
-            <PremiumButton isSubscriber={isSubscriber} />
-          </div>
+          <LibraryNavLink isActive={pathname === "/library"} />
 
           <NavDivider />
 
