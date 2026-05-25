@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const LIMIT = 24;
+const VIEW_BOOST = 0.4;
+const TRENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type SortOption = "trending" | "newest" | "oldest";
 
@@ -16,6 +18,7 @@ type PromptEntry = {
   prompt: string;
   cached_at: string;
   views: number;
+  title?: string | null;
   relevance_score?: number;
 };
 
@@ -46,7 +49,9 @@ async function runFallbackSearch(
   const runQuery = (strategy?: FtsStrategy) => {
     let query = supabase
       .from("prompt_cache")
-      .select("id, owner, repo, prompt, cached_at, views", { count: "exact" });
+      .select("id, owner, repo, prompt, cached_at, views, title", {
+        count: "exact",
+      });
 
     if (words.length > 0 && strategy) {
       switch (strategy) {
@@ -91,9 +96,17 @@ async function runFallbackSearch(
       case "trending":
       default:
         query = query
+          .gte(
+            "cached_at",
+            new Date(Date.now() - TRENDING_WINDOW_MS).toISOString()
+          )
           .order("views", { ascending: false })
           .order("cached_at", { ascending: false });
         break;
+    }
+
+    if (words.length > 0) {
+      query = query.order("views", { ascending: false });
     }
 
     return query.range(from, from + limit - 1);
@@ -171,18 +184,42 @@ async function runHybridSearch(
   }
 
   const rows = (searchRes.data ?? []) as PromptEntry[];
-  const maxScore = rows.reduce(
+
+  const ids = rows.map((row) => row.id).filter(Boolean);
+  let titleById = new Map<number, string | null>();
+  if (ids.length > 0) {
+    const { data: titleRows } = await supabase
+      .from("prompt_cache")
+      .select("id, title")
+      .in("id", ids);
+    titleById = new Map(
+      (titleRows ?? []).map((row) => [row.id as number, row.title as string | null])
+    );
+  }
+
+  const rowsWithTitles = rows.map((row) => ({
+    ...row,
+    title: titleById.get(row.id) ?? row.title ?? null,
+  }));
+
+  const boostedRows = rowsWithTitles.map((row) => ({
+    ...row,
+    relevance_score:
+      (row.relevance_score ?? 0) *
+      (1 + Math.log10((row.views ?? 0) + 1) * VIEW_BOOST),
+  }));
+  const maxScore = boostedRows.reduce(
     (max, row) => Math.max(max, row.relevance_score ?? 0),
     0
   );
 
   const data =
     maxScore > 0
-      ? rows.map((row) => ({
+      ? boostedRows.map((row) => ({
           ...row,
           relevance_score: (row.relevance_score ?? 0) / maxScore,
         }))
-      : rows;
+      : boostedRows;
 
   return {
     data,

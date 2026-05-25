@@ -480,6 +480,16 @@ export async function POST(request: NextRequest) {
               embedError instanceof Error ? embedError.message : embedError
             );
           }
+
+          try {
+            const { updatePromptTitle } = await import("@/lib/prompt-cache-title");
+            await updatePromptTitle(sb, { owner, repo, prompt });
+          } catch (titleError) {
+            console.error(
+              "[reverse-prompt] cache title:",
+              titleError instanceof Error ? titleError.message : titleError
+            );
+          }
         });
     }
 

@@ -11,6 +11,7 @@ type PromptEntry = {
   prompt: string;
   cached_at: string;
   views?: number;
+  title?: string | null;
   relevance_score?: number;
 };
 
@@ -56,6 +57,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [page, setPage] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
+  const [initialFetchDone, setInitialFetchDone] = useState(initialData.length > 0);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -113,7 +115,11 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   // Re-sync after mount so view counts (and other fields) are not stale from
   // RSC/router cache when returning from a repo page.
   useEffect(() => {
-    void fetchPage("", "newest", 0, false);
+    startTransition(() => {
+      void fetchPage("", "newest", 0, false).then(() => {
+        setInitialFetchDone(true);
+      });
+    });
   }, [fetchPage]);
 
   async function handleLoadMore() {
@@ -272,15 +278,19 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
 
         {/* Card grid */}
         {entries.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-center">
-            <span className="text-4xl">∅</span>
-            <p className="text-lg font-semibold text-zinc-700">No prompts found</p>
-            <p className="text-zinc-500">Try a different search term.</p>
-          </div>
+          !initialFetchDone ? (
+            <SkeletonGrid />
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-24 text-center">
+              <span className="text-4xl">∅</span>
+              <p className="text-lg font-semibold text-zinc-700">No prompts found</p>
+              <p className="text-zinc-500">Try a different search term.</p>
+            </div>
+          )
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {entries.map((entry) => (
-              <PromptCard key={entry.id} entry={entry} showRelevance={Boolean(search.trim())} />
+              <PromptCard key={entry.id} entry={entry} />
             ))}
           </div>
         )}
@@ -352,18 +362,31 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   );
 }
 
-function PromptCard({
-  entry,
-  showRelevance = false,
-}: {
-  entry: PromptEntry;
-  showRelevance?: boolean;
-}) {
+function SkeletonGrid() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="relative block">
+          <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-xl bg-zinc-900/20" />
+          <div className="relative z-10 flex min-h-[88px] animate-pulse flex-col justify-between gap-4 rounded-xl border-[3px] border-zinc-200 bg-white p-4">
+            <div className="space-y-2">
+              <div className="h-4 w-4/5 rounded bg-zinc-200" />
+              <div className="h-4 w-3/5 rounded bg-zinc-100" />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="h-5 w-14 rounded bg-zinc-100" />
+              <div className="h-5 w-20 rounded bg-zinc-100" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PromptCard({ entry }: { entry: PromptEntry }) {
   const href = `/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repo)}`;
-  const truncated =
-    entry.prompt.length > 160
-      ? entry.prompt.slice(0, 160).trimEnd() + "…"
-      : entry.prompt;
+  const displayTitle = entry.title?.trim() || entry.repo;
 
   return (
     <Link
@@ -371,55 +394,19 @@ function PromptCard({
       target="_blank"
       rel="noopener noreferrer"
       className="group relative block cursor-pointer"
-      aria-label={`${entry.owner}/${entry.repo}`}
+      aria-label={displayTitle}
     >
       <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-xl bg-zinc-900 transition-transform group-hover:translate-x-2 group-hover:translate-y-2" />
-      <div className="relative z-10 flex h-full flex-col gap-3 rounded-xl border-[3px] border-zinc-900 bg-white p-4 transition-transform group-hover:-translate-x-0.5 group-hover:-translate-y-0.5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-zinc-500">
-              {entry.owner}
-            </p>
-            <p className="truncate text-base font-bold text-zinc-900">
-              {entry.repo}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              window.open(
-                `https://github.com/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repo)}`,
-                "_blank",
-                "noopener,noreferrer"
-              );
-            }}
-            className="shrink-0 rounded p-1 text-zinc-400 transition-colors hover:text-zinc-900"
-            aria-label={`View ${entry.owner}/${entry.repo} on GitHub`}
-          >
-            <svg className="h-4 w-4" viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path fillRule="evenodd" clipRule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.096-.08-9.211-13.588 2.963-16.424-5.867-16.424-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.613-10.839-1.22-22.229-5.412-22.229-24.054 0-5.312 1.895-9.718 5.424-13.126-.526-1.324-2.356-6.74.505-14.052 0 0 4.432-1.505 14.5 5.008 4.172-1.095 8.73-1.63 13.168-1.656 4.469.026 8.971.561 13.166 1.656 10.06-6.513 14.48-5.008 14.48-5.008 2.866 7.326 1.052 12.728.53 14.052 3.532 3.408 5.414 7.814 5.414 13.126 0 18.728-11.401 22.813-22.285 23.985 1.772 1.514 3.316 4.539 3.316 9.119 0 6.613-.08 11.898-.08 13.526 0 1.304.878 2.853 3.316 2.364C84.974 89.385 98 70.983 98 49.204 98 22 76.038 0 48.854 0z" fill="currentColor" />
-            </svg>
-          </button>
-        </div>
+      <div className="relative z-10 flex min-h-[88px] flex-col justify-between gap-4 rounded-xl border-[3px] border-zinc-900 bg-white p-4 transition-transform group-hover:-translate-x-0.5 group-hover:-translate-y-0.5">
+        <h2 className="line-clamp-2 text-base font-semibold leading-snug text-zinc-900">
+          {displayTitle}
+        </h2>
 
-        {/* Prompt preview */}
-        <p className="flex-1 text-sm leading-relaxed text-zinc-600">{truncated}</p>
-
-        {/* Footer */}
         <div className="flex items-center justify-between gap-2">
           <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
             {relativeTime(entry.cached_at)}
           </span>
-          <div className="flex items-center gap-2">
-            {showRelevance && typeof entry.relevance_score === "number" && (
-              <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                {Math.round(entry.relevance_score * 100)}% match
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
+          <span className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
             <svg
               className="h-3.5 w-3.5 shrink-0 text-zinc-400"
               xmlns="http://www.w3.org/2000/svg"
@@ -436,8 +423,7 @@ function PromptCard({
             </svg>
             {(entry.views ?? 0).toLocaleString()}{" "}
             {(entry.views ?? 0) === 1 ? "view" : "views"}
-            </span>
-          </div>
+          </span>
         </div>
       </div>
     </Link>
