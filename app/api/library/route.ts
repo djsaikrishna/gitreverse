@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 const LIMIT = 24;
 const VIEW_BOOST = 0.4;
-const TRENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 type SortOption = "trending" | "newest" | "oldest";
 

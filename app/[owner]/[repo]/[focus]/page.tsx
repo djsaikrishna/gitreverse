@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { connection } from "next/server";
 import { ReversePromptHome } from "@/components/reverse-prompt-home";
 import { focusFingerprint } from "@/lib/focus-fingerprint";
@@ -9,24 +11,66 @@ type PageProps = {
   params: Promise<{ owner: string; repo: string; focus: string }>;
 };
 
+function decodeFocus(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+const getFocusCachedPrompt = cache(async (owner: string, repoNorm: string, fp: string) => {
+  try {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+    const { data } = await supabase
+      .from("custom_prompt_cache")
+      .select("prompt")
+      .eq("owner", owner)
+      .eq("repo", repoNorm)
+      .eq("focus_fingerprint", fp)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
+});
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { owner: ownerRaw, repo: repoRaw, focus: focusRaw } = await params;
+  const owner = decodeURIComponent(ownerRaw);
+  const repoNorm = normalizeRepoSegment(decodeURIComponent(repoRaw));
+  const trimmedFocus = decodeFocus(focusRaw);
+
+  const pageTitle = trimmedFocus
+    ? `${trimmedFocus} — ${owner}/${repoNorm}`
+    : `${owner}/${repoNorm}`;
+  const fp = focusFingerprint(trimmedFocus ?? "");
+  const data = trimmedFocus ? await getFocusCachedPrompt(owner, repoNorm, fp) : null;
+  const pageDesc = data?.prompt
+    ? (data.prompt as string).slice(0, 160).trimEnd() + "…"
+    : trimmedFocus
+      ? `Focused reverse-engineered prompt for "${trimmedFocus}" in ${owner}/${repoNorm}.`
+      : `Reverse-engineered coding agent prompt for ${owner}/${repoNorm}.`;
+  const url = `https://gitreverse.com/${owner}/${repoNorm}/${encodeURIComponent(trimmedFocus ?? "")}`;
+
+  return {
+    title: pageTitle,
+    description: pageDesc,
+    alternates: { canonical: url },
+    openGraph: { title: pageTitle, description: pageDesc, url, type: "article" },
+    twitter: { title: pageTitle, description: pageDesc },
+  };
+}
+
 export default async function RepoFocusPage({ params }: PageProps) {
   await connection();
   const { owner: ownerRaw, repo: repoRaw, focus: focusRaw } = await params;
   const owner = decodeURIComponent(ownerRaw);
   const repo = decodeURIComponent(repoRaw);
-  let focus: string;
-  try {
-    focus = decodeURIComponent(focusRaw);
-  } catch {
-    notFound();
-  }
+  const trimmedFocus = decodeFocus(focusRaw);
 
-  if (!isValidGitHubRepoPath(owner, repo)) {
-    notFound();
-  }
-
-  const trimmedFocus = focus.trim();
-  if (!trimmedFocus) {
+  if (!trimmedFocus || !isValidGitHubRepoPath(owner, repo)) {
     notFound();
   }
 
@@ -34,24 +78,8 @@ export default async function RepoFocusPage({ params }: PageProps) {
   const initialRepoInput = `${owner}/${repoNorm}`;
   const fp = focusFingerprint(trimmedFocus);
 
-  let cachedPrompt: string | undefined;
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data } = await supabase
-        .from("custom_prompt_cache")
-        .select("prompt")
-        .eq("owner", owner)
-        .eq("repo", repoNorm)
-        .eq("focus_fingerprint", fp)
-        .maybeSingle();
-      if (data?.prompt) {
-        cachedPrompt = data.prompt as string;
-      }
-    }
-  } catch {
-    // fall back to client auto-submit
-  }
+  const data = await getFocusCachedPrompt(owner, repoNorm, fp);
+  const cachedPrompt = data?.prompt ? (data.prompt as string) : undefined;
 
   return (
     <ReversePromptHome

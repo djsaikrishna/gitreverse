@@ -15,9 +15,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GitReverse",
+  metadataBase: new URL("https://gitreverse.com"),
+  title: {
+    default: "GitReverse",
+    template: "%s — GitReverse",
+  },
   description:
-    "Turn a GitHub repository into a plain-language coding agent prompt.",
+    "Reverse engineer any GitHub repository into a plain-language coding agent prompt you can build from.",
+  openGraph: {
+    type: "website",
+    siteName: "GitReverse",
+    title: "GitReverse",
+    description:
+      "Reverse engineer any GitHub repository into a plain-language coding agent prompt you can build from.",
+    url: "https://gitreverse.com",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GitReverse",
+    description:
+      "Reverse engineer any GitHub repository into a plain-language coding agent prompt you can build from.",
+  },
 };
 
 const checkoutNavigationRestoreScript = `

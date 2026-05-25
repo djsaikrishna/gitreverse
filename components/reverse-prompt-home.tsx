@@ -1008,7 +1008,7 @@ export function ReversePromptHome({
           </div>
         ) : null}
         <div className="flex w-full flex-col items-center gap-6">
-          {isHome && (
+          {isHome ? (
             <div className="relative flex w-full flex-col items-center text-center">
 
               <h1 className="text-5xl font-extrabold tracking-tighter sm:text-6xl lg:text-7xl">
@@ -1020,7 +1020,9 @@ export function ReversePromptHome({
                 Reverse engineer a codebase into a prompt you can build from.
               </p>
             </div>
-          )}
+          ) : (owner && repo) ? (
+            <h1 className="sr-only">{`${owner}/${repo} — reverse-engineered prompt`}</h1>
+          ) : null}
           <div className="flex w-full max-w-2xl flex-col gap-3">
           <div className="relative w-full">
             <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900" />
