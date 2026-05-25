@@ -7,14 +7,14 @@ export const metadata: Metadata = {
     "Unlimited deep reverse, unlimited manual control, and no monthly limits for $9/mo.",
   alternates: { canonical: "https://gitreverse.com/premium" },
   openGraph: {
-    title: "Premium — GitReverse",
+    title: "Premium",
     description:
       "Unlimited deep reverse, unlimited manual control, and no monthly limits for $9/mo.",
     url: "https://gitreverse.com/premium",
     type: "website",
   },
   twitter: {
-    title: "Premium — GitReverse",
+    title: "Premium",
     description:
       "Unlimited deep reverse, unlimited manual control, and no monthly limits for $9/mo.",
   },

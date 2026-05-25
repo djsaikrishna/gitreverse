@@ -12,14 +12,14 @@ export const metadata: Metadata = {
     "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
   alternates: { canonical: "https://gitreverse.com/library" },
   openGraph: {
-    title: "Prompt Library — GitReverse",
+    title: "Prompt Library",
     description:
       "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
     url: "https://gitreverse.com/library",
     type: "website",
   },
   twitter: {
-    title: "Prompt Library — GitReverse",
+    title: "Prompt Library",
     description:
       "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
   },
