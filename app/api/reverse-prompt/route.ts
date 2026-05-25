@@ -460,11 +460,34 @@ export async function POST(request: NextRequest) {
           },
           { onConflict: "owner,repo" }
         )
-        .then(({ error: upsertError }) => {
+        .then(async ({ error: upsertError }) => {
           if (upsertError) {
             console.error(
               "[reverse-prompt] cache upsert:",
               upsertError.message
+            );
+            return;
+          }
+
+          try {
+            const { updatePromptEmbedding } = await import(
+              "@/lib/prompt-cache-embedding"
+            );
+            await updatePromptEmbedding(sb, { owner, repo, prompt });
+          } catch (embedError) {
+            console.error(
+              "[reverse-prompt] cache embedding:",
+              embedError instanceof Error ? embedError.message : embedError
+            );
+          }
+
+          try {
+            const { updatePromptTitle } = await import("@/lib/prompt-cache-title");
+            await updatePromptTitle(sb, { owner, repo, prompt });
+          } catch (titleError) {
+            console.error(
+              "[reverse-prompt] cache title:",
+              titleError instanceof Error ? titleError.message : titleError
             );
           }
         });

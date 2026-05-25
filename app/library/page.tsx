@@ -23,13 +23,14 @@ export default async function LibraryRoute() {
     prompt: string;
     cached_at: string;
     views?: number;
+    title?: string | null;
   }[] = [];
   let initialTotal = 0;
 
   if (supabase) {
     const { data, count } = await supabase
       .from("prompt_cache")
-      .select("id, owner, repo, prompt, cached_at, views", { count: "exact" })
+      .select("id, owner, repo, prompt, cached_at, views, title", { count: "exact" })
       .order("cached_at", { ascending: false })
       .range(0, INITIAL_LIMIT - 1);
 

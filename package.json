@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:titles": "node --env-file=.env.local scripts/test-titles.mjs",
+    "db:migrate:title": "node --env-file=.env.local scripts/apply-title-migration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
