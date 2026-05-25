@@ -23,8 +23,8 @@ const SORT_OPTIONS: SortOption[] = ["newest", "trending", "oldest"];
 
 const SORT_LABELS: Record<SortOption, string> = {
   trending: "Trending",
-  newest: "Newest first",
-  oldest: "Oldest first",
+  newest: "Newest",
+  oldest: "Oldest",
 };
 
 const PAGE_SIZE = 24;
@@ -50,7 +50,7 @@ type LibraryPageProps = {
 
 export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortOption>("newest");
+  const [sort, setSort] = useState<SortOption>("trending");
   const [entries, setEntries] = useState<PromptEntry[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
   const [strategy, setStrategy] = useState<SearchStrategy>("browse");
@@ -116,7 +116,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   // RSC/router cache when returning from a repo page.
   useEffect(() => {
     startTransition(() => {
-      void fetchPage("", "newest", 0, false).then(() => {
+      void fetchPage("", "trending", 0, false).then(() => {
         setInitialFetchDone(true);
       });
     });
@@ -245,36 +245,22 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
         </div>
 
         {/* Count line */}
-        <p className="text-sm text-zinc-500">
-          {search ? (
-            <>
-              <span className="font-semibold text-zinc-900">
-                {total.toLocaleString()}
-              </span>{" "}
-              result{total !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
-              {strategy && (
-                <>
-                  {" "}
-                  <span className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-zinc-600">
-                    {strategy}
-                  </span>
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              Showing{" "}
-              <span className="font-semibold text-zinc-900">
-                {entries.length.toLocaleString()}
-              </span>{" "}
-              of{" "}
-              <span className="font-semibold text-zinc-900">
-                {total.toLocaleString()}
-              </span>{" "}
-              prompts
-            </>
-          )}
-        </p>
+        {search ? (
+          <p className="text-sm text-zinc-500">
+            <span className="font-semibold text-zinc-900">
+              {total.toLocaleString()}
+            </span>{" "}
+            result{total !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
+            {strategy && (
+              <>
+                {" "}
+                <span className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-zinc-600">
+                  {strategy}
+                </span>
+              </>
+            )}
+          </p>
+        ) : null}
 
         {/* Card grid */}
         {entries.length === 0 ? (
