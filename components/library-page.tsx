@@ -178,7 +178,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search repos or prompts…"
+                placeholder="Search prompts…"
                 className="w-full bg-transparent px-3 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
               />
               {isPending && (

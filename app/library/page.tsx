@@ -11,7 +11,7 @@ export const metadata = {
 };
 
 const INITIAL_LIMIT = 24;
-const TRENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function LibraryRoute() {
   await connection();
