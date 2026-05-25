@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export const TITLE_MODEL = "openai/gpt-4o";
-const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+export const TITLE_MODEL = "gpt-4o-mini";
+const OPENAI_BASE = "https://api.openai.com/v1";
 const PROMPT_LIMIT = 600;
 
 export const TITLE_SYSTEM_PROMPT =
   "Generate a concise 5–10 word title describing what this prompt is about. " +
+  "Write it as a noun phrase — do NOT start with a verb or gerund like 'Building', 'Creating', 'Setting up', 'Implementing', etc. " +
+  "Describe what the output IS, not what is being done. " +
   "Return only the title — no quotes, no trailing punctuation.";
 
 export type TitleInput = {
@@ -21,8 +23,8 @@ type PromptRow = {
   prompt: string;
 };
 
-export function getOpenRouterApiKey(): string | null {
-  const key = process.env.OPENROUTER_API_KEY?.trim();
+export function getOpenAiApiKey(): string | null {
+  const key = process.env.OPENAI_API_KEY?.trim();
   return key || null;
 }
 
@@ -34,22 +36,16 @@ export function sanitizeTitle(raw: string): string {
 }
 
 export async function generateTitle(prompt: string): Promise<string | null> {
-  const apiKey = getOpenRouterApiKey();
+  const apiKey = getOpenAiApiKey();
   if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not configured.");
+    throw new Error("OPENAI_API_KEY is not configured.");
   }
 
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+  const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      ...(process.env.OPENROUTER_HTTP_REFERER
-        ? { "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER }
-        : {}),
-      ...(process.env.OPENROUTER_APP_TITLE
-        ? { "X-Title": process.env.OPENROUTER_APP_TITLE }
-        : {}),
     },
     body: JSON.stringify({
       model: TITLE_MODEL,

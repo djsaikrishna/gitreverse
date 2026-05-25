@@ -6,15 +6,16 @@
  *   node --env-file=.env.local scripts/generate-titles.mjs --limit 50 --dry-run
  *   node --env-file=.env.local scripts/generate-titles.mjs --concurrency 20
  *
- * Requires: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY
+ * Requires: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY
  */
 
-const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
-const MODEL = "openai/gpt-4o-mini";
+const OPENAI_BASE = "https://api.openai.com/v1";
+const MODEL = "gpt-4o-mini";
 const PROMPT_LIMIT = 600;
 const PAGE_SIZE = 1000;
 const DEFAULT_CONCURRENCY = 10;
 
+// Keep in sync with lib/prompt-cache-title.ts TITLE_SYSTEM_PROMPT
 const SYSTEM_PROMPT =
   "Generate a concise 5–10 word title describing what this prompt is about. " +
   "Write it as a noun phrase — do NOT start with a verb or gerund like 'Building', 'Creating', 'Setting up', 'Implementing', etc. " +
@@ -132,18 +133,12 @@ async function fetchUntitledPage(supabaseUrl, supabaseKey, { afterId, pageSize, 
   return res.json();
 }
 
-async function generateTitle(openRouterKey, promptText) {
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+async function generateTitle(openAiKey, promptText) {
+  const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${openRouterKey}`,
+      Authorization: `Bearer ${openAiKey}`,
       "Content-Type": "application/json",
-      ...(process.env.OPENROUTER_HTTP_REFERER
-        ? { "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER }
-        : {}),
-      ...(process.env.OPENROUTER_APP_TITLE
-        ? { "X-Title": process.env.OPENROUTER_APP_TITLE }
-        : {}),
     },
     body: JSON.stringify({
       model: MODEL,
@@ -224,7 +219,7 @@ async function main() {
   const supabaseUrl = requireEnv("SUPABASE_URL");
   const supabaseKey = requireEnv("SUPABASE_PUBLISHABLE_KEY");
   const serviceKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-  const openRouterKey = requireEnv("OPENROUTER_API_KEY");
+  const openAiKey = requireEnv("OPENAI_API_KEY");
 
   const summary = {
     processed: 0,
@@ -273,7 +268,7 @@ async function main() {
       const label = `${row.owner}/${row.repo} (#${row.id})`;
 
       try {
-        const title = await generateTitle(openRouterKey, row.prompt);
+        const title = await generateTitle(openAiKey, row.prompt);
 
         if (options.dryRun) {
           summary.processed += 1;
