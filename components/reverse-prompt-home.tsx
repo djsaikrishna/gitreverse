@@ -21,6 +21,7 @@ import {
   syncHistoryEntry,
   writeLocalHistory,
 } from "@/lib/user-history";
+import LZString from "lz-string";
 
 const RL_KEY_MONTHLY = "gr_rl_monthly";
 const MONTHLY_CUSTOM_LIMIT = 1;
@@ -30,6 +31,11 @@ const CHECKOUT_NAVIGATION_STATE_KEY = "gr_checkout_navigation_state";
 const CHECKOUT_RETURNED_STATE = "returned";
 
 const PENDING_AUTH_KEY = "gr_pending_auth_action";
+
+function createReplitLink(promptText: string): string {
+  const compressed = LZString.compressToEncodedURIComponent(promptText);
+  return `https://replit.com/?stack=Build&prompt=${compressed}&referrer=gitreverse`;
+}
 
 type PendingAuthAction =
   | { type: "deep"; repoUrl: string }
@@ -1298,25 +1304,27 @@ export function ReversePromptHome({
                   {prompt}
                 </ReactMarkdown>
               </div>
-              {!lastResultWasCustom && !loading ? (
-                <p className="mt-4 text-center text-sm text-zinc-600">
-                  Want more depth?{" "}
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="cursor-pointer font-medium text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-950"
-                    onClick={() => {
-                      startDeepReverse();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      startDeepReverse();
-                    }}
+              {prompt && !loading ? (
+                <div className="mt-4 flex justify-center">
+                  <a
+                    href={createReplitLink(prompt)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative inline-flex"
                   >
-                    Deep Reverse
-                  </span>
-                </p>
+                    <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
+                    <span className="relative z-10 inline-flex items-center gap-2 rounded border-[3px] border-zinc-900 bg-white px-4 py-2 text-sm font-bold text-zinc-900 transition-transform group-hover:-translate-x-px group-hover:-translate-y-px">
+                      Build with Replit
+                      <img
+                        src="/replit-icon.png"
+                        alt="Replit"
+                        width={20}
+                        height={20}
+                        className="h-5 w-5 shrink-0"
+                      />
+                    </span>
+                  </a>
+                </div>
               ) : null}
             </section>
           </div>
