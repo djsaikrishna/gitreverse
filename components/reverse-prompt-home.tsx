@@ -320,6 +320,24 @@ export function ReversePromptHome({
             setIsSubscriber(false);
           }
         }
+      } else {
+        const authEmail = session?.user?.email?.trim();
+        if (authEmail) {
+          try {
+            const res = await fetch(
+              `/api/check-subscription?email=${encodeURIComponent(authEmail)}`
+            );
+            const data = (await res.json()) as { subscribed?: boolean };
+            if (cancelled) return;
+            if (data.subscribed) {
+              localStorage.setItem(SUBSCRIBER_EMAIL_KEY, authEmail);
+              setSubscriberEmail(authEmail);
+              setIsSubscriber(true);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       }
       if (!cancelled) setSubscriberHydrated(true);
     }
@@ -328,7 +346,7 @@ export function ReversePromptHome({
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, session]);
 
   /** Close auth modal after successful sign-in (popup flow). */
   useEffect(() => {

@@ -46,7 +46,7 @@ function FeatureRow({ title, description }: FeatureRowProps) {
 }
 
 export function PremiumPage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -68,6 +68,33 @@ export function PremiumPage() {
     window.addEventListener("storage", read);
     return () => window.removeEventListener("storage", read);
   }, []);
+
+  useEffect(() => {
+    if (subscriberFromStorage === true) return;
+    const authEmail = user?.email?.trim();
+    if (!authEmail) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/check-subscription?email=${encodeURIComponent(authEmail)}`
+        );
+        const data = (await res.json()) as { subscribed?: boolean };
+        if (cancelled) return;
+        if (data.subscribed) {
+          localStorage.setItem(SUBSCRIBER_EMAIL_KEY, authEmail);
+          setSubscriberFromStorage(true);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, subscriberFromStorage]);
 
   useEffect(() => {
     if (!pendingCheckout || !isAuthenticated || authLoading) return;
