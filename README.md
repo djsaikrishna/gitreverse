@@ -16,20 +16,17 @@ Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, GitHub API, Supab
 
 ## Configuration
 
-Copy `.env.example` to `.env.local` and fill in at least one LLM API key.
+Copy `.env.example` to `.env.local` and fill in **`OPENAI_API_KEY`**.
 
-### Quick LLM (required)
+### Quick reverse (required)
 
-The quick reverse endpoint supports four providers. Set **`GITREVERSE_QUICK_LLM`** to pin one, or leave it unset (`auto`) to let the app use whichever key it finds first:
+Quick reverse uses **OpenAI** for prompt generation, plus the same key for library embeddings and auto-generated cache titles:
 
-| Provider | Key env var | Model env var | Default model |
+| Use | Key env var | Model env var | Default model |
 |---|---|---|---|
-| Grok (xAI) | `XAI_API_KEY` | `XAI_MODEL` | `grok-3` |
-| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `google/gemini-2.5-pro` |
-| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-4.1` |
-| Google AI Studio | `GOOGLE_GENERATIVE_AI_API_KEY` | `GOOGLE_AI_STUDIO_MODEL` | `gemini-2.5-pro` |
-
-In `auto` mode the order of preference is: Grok → OpenRouter → OpenAI → Google.
+| Quick reverse | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-4.1` |
+| Library search embeddings | `OPENAI_API_KEY` | — | `text-embedding-3-small` |
+| Cache titles | `OPENAI_API_KEY` | — | `gpt-4o-mini` |
 
 ### Other env vars
 
@@ -39,7 +36,7 @@ In `auto` mode the order of preference is: Grok → OpenRouter → OpenAI → Go
 
 ### Custom reverse (optional)
 
-For **deep / focus** prompts, point the app at a backend service:
+For **deep / focus** prompts, point the app at the `custom_reverse` backend (Cursor SDK):
 
 ```
 CUSTOM_REVERSE_SERVICE_URL=http://localhost:3001

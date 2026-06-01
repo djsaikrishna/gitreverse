@@ -8,11 +8,17 @@ import { getSupabase } from "@/lib/supabase";
 export const runtime = "nodejs";
 
 const README_MAX_CHARS = 8000;
-const DEFAULT_CUSTOM_REVERSE_URL = "http://localhost:3001";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
-function getServiceUrl(): string {
-  return (
-    process.env.CUSTOM_REVERSE_SERVICE_URL?.trim() || DEFAULT_CUSTOM_REVERSE_URL
+function writeSse(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  event: string,
+  data: unknown
+): void {
+  controller.enqueue(
+    encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
   );
 }
 
@@ -96,43 +102,147 @@ function persistPromptCache(owner: string, repo: string, prompt: string): void {
     });
 }
 
-async function parseSseStreamForDonePersist(
-  body: ReadableStream<Uint8Array>,
-  owner: string,
-  repo: string
-): Promise<void> {
-  const reader = body.getReader();
+function isExhaustedCreditsOrQuotaMessage(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("insufficient_quota") ||
+    lower.includes("rate_limit_exceeded") ||
+    lower.includes("exceeded your current quota") ||
+    lower.includes("billing has not been enabled")
+  );
+}
+
+function extractOpenAiErrorMessage(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const err = (data as { error?: unknown }).error;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === "string" && m.trim()) return m.trim();
+  }
+  return null;
+}
+
+async function streamPromptFromOpenAi(opts: {
+  userContent: string;
+  owner: string;
+  repo: string;
+  controller: ReadableStreamDefaultController<Uint8Array>;
+  encoder: TextEncoder;
+}): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    writeSse(opts.controller, opts.encoder, "error", {
+      error: "OPENAI_API_KEY is not configured.",
+    });
+    return;
+  }
+
+  let openAiRes: Response;
+  try {
+    openAiRes = await fetch(OPENAI_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        stream: true,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: opts.userContent },
+        ],
+      }),
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    writeSse(opts.controller, opts.encoder, "error", {
+      error: `Generation failed: ${message}`,
+    });
+    return;
+  }
+
+  if (!openAiRes.ok) {
+    let msg = `OpenAI error ${openAiRes.status}`;
+    try {
+      const data = await openAiRes.json();
+      msg = extractOpenAiErrorMessage(data) ?? msg;
+    } catch {
+      // ignore
+    }
+
+    if (
+      openAiRes.status === 429 ||
+      openAiRes.status === 402 ||
+      isExhaustedCreditsOrQuotaMessage(msg)
+    ) {
+      writeSse(opts.controller, opts.encoder, "error", {
+        error: "Service is currently over capacity. Try again later.",
+      });
+      return;
+    }
+
+    const isAuth =
+      openAiRes.status === 401 ||
+      msg.toLowerCase().includes("unauthorized") ||
+      msg.toLowerCase().includes("invalid api key");
+    writeSse(opts.controller, opts.encoder, "error", {
+      error: isAuth
+        ? "OpenAI authentication failed. Check OPENAI_API_KEY in .env.local."
+        : `Generation failed: ${msg}`,
+    });
+    return;
+  }
+
+  if (!openAiRes.body) {
+    writeSse(opts.controller, opts.encoder, "error", {
+      error: "OpenAI returned an empty body.",
+    });
+    return;
+  }
+
+  const reader = openAiRes.body.getReader();
   const dec = new TextDecoder();
-  let buf = "";
+  let buffer = "";
+  let fullPrompt = "";
+
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buf += dec.decode(value, { stream: true });
+      buffer += dec.decode(value, { stream: true });
+
       for (;;) {
-        const idx = buf.indexOf("\n\n");
-        if (idx < 0) break;
-        const block = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-        if (!block.includes("event: done")) continue;
-        const dataLine = block
-          .split("\n")
-          .find((l) => l.startsWith("data: "));
-        if (!dataLine) continue;
+        const lineEnd = buffer.indexOf("\n");
+        if (lineEnd < 0) break;
+        const line = buffer.slice(0, lineEnd).trim();
+        buffer = buffer.slice(lineEnd + 1);
+        if (!line.startsWith("data:")) continue;
+
+        const payload = line.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+
         try {
-          const json = JSON.parse(dataLine.slice(5).trim()) as {
-            prompt?: string;
+          const json = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
           };
-          if (typeof json.prompt === "string" && json.prompt) {
-            persistPromptCache(owner, repo, json.prompt);
+          const chunk = json.choices?.[0]?.delta?.content;
+          if (typeof chunk === "string" && chunk) {
+            fullPrompt += chunk;
+            writeSse(opts.controller, opts.encoder, "token", { chunk });
           }
         } catch {
-          // ignore
+          // ignore malformed chunk
         }
       }
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    writeSse(opts.controller, opts.encoder, "error", {
+      error: `Generation stream failed: ${message}`,
+    });
+    return;
   } finally {
     try {
       reader.releaseLock();
@@ -140,6 +250,17 @@ async function parseSseStreamForDonePersist(
       // ignore
     }
   }
+
+  const prompt = fullPrompt.trim();
+  if (!prompt) {
+    writeSse(opts.controller, opts.encoder, "error", {
+      error: "Model did not return a usable text response.",
+    });
+    return;
+  }
+
+  persistPromptCache(opts.owner, opts.repo, prompt);
+  writeSse(opts.controller, opts.encoder, "done", { prompt });
 }
 
 export async function POST(request: NextRequest) {
@@ -231,62 +352,29 @@ export async function POST(request: NextRequest) {
     tree.truncated
   );
 
-  const agentMessage = [
-    SYSTEM_PROMPT.trim(),
-    "",
-    "---",
-    "",
-    userContent.trim(),
-  ].join("\n");
-
-  const base = getServiceUrl().replace(/\/$/, "");
-  let upstream: Response;
-  try {
-    upstream = await fetch(`${base}/prompt/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: agentMessage }),
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json(
-      {
-        error: `Generation service unreachable (${msg}). Check CUSTOM_REVERSE_SERVICE_URL and that custom_reverse is running.`,
-      },
-      { status: 503 }
-    );
-  }
-
-  if (!upstream.ok) {
-    let err = `Request failed (${upstream.status})`;
-    try {
-      const j = (await upstream.json()) as { error?: string };
-      if (j.error) err = j.error;
-    } catch {
-      // ignore
-    }
-    return NextResponse.json(
-      { error: err },
-      {
-        status:
-          upstream.status >= 400 && upstream.status < 600
-            ? upstream.status
-            : 502,
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        await streamPromptFromOpenAi({
+          userContent,
+          owner,
+          repo,
+          controller,
+          encoder,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        writeSse(controller, encoder, "error", {
+          error: `Generation failed: ${msg}`,
+        });
+      } finally {
+        controller.close();
       }
-    );
-  }
+    },
+  });
 
-  if (!upstream.body) {
-    return NextResponse.json(
-      { error: "Generation service returned an empty body." },
-      { status: 502 }
-    );
-  }
-
-  const [toClient, toParse] = upstream.body.tee();
-  void parseSseStreamForDonePersist(toParse, owner, repo);
-
-  return new Response(toClient, {
+  return new Response(stream, {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
