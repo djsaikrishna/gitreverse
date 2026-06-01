@@ -6,7 +6,6 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
-import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
 import { useAuth } from "@/contexts/AuthContext";
 import { HOME_EXAMPLES } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
@@ -197,6 +196,7 @@ export function ReversePromptHome({
   const [abandonmentOtherText, setAbandonmentOtherText] = useState("");
   const [abandonmentShowOther, setAbandonmentShowOther] = useState(false);
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
+  const [streamingPrompt, setStreamingPrompt] = useState("");
   const [copied, setCopied] = useState(false);
   /** Live line for manual/deep (SSE or cache); empty when idle. */
   const [manualStatusLine, setManualStatusLine] = useState("");
@@ -359,6 +359,7 @@ export function ReversePromptHome({
     setError(null);
     setRateLimited(false);
     setPrompt("");
+    setStreamingPrompt("");
     setCopied(false);
     setLoadKind("quick");
     setLoading(true);
@@ -368,39 +369,128 @@ export function ReversePromptHome({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repoUrl: input }),
       });
-      const data = (await res.json()) as {
-        prompt?: string;
-        error?: string;
-      };
-      if (!res.ok) {
-        if (res.status === 429) {
-          setRateLimited(true);
+
+      const ct = res.headers.get("content-type") ?? "";
+
+      if (ct.includes("application/json")) {
+        const data = (await res.json()) as {
+          prompt?: string;
+          error?: string;
+          fromCache?: boolean;
+        };
+        if (!res.ok) {
+          if (res.status === 429) {
+            setRateLimited(true);
+            return;
+          }
+          setError(data.error ?? `Request failed (${res.status})`);
           return;
         }
-        setError(data.error ?? `Request failed (${res.status})`);
+        if (typeof data.prompt === "string") {
+          setPrompt(data.prompt);
+          setLastResultWasCustom(false);
+          setLastGenerationKind("quick");
+          setLastManualFocus(null);
+          const parsed = parseGitHubRepoInput(input);
+          if (parsed && typeof window !== "undefined" && !preserveUrl) {
+            window.history.replaceState(
+              null,
+              "",
+              `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
+            );
+          }
+        } else {
+          setError("No prompt in response.");
+        }
         return;
       }
-      if (typeof data.prompt === "string") {
-        setPrompt(data.prompt);
-        setLastResultWasCustom(false);
-        setLastGenerationKind("quick");
-        setLastManualFocus(null);
-        const parsed = parseGitHubRepoInput(input);
-        if (parsed && typeof window !== "undefined" && !preserveUrl) {
-          window.history.replaceState(
-            null,
-            "",
-            `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-          );
+
+      if (!res.ok) {
+        try {
+          const errData = (await res.json()) as { error?: string };
+          if (res.status === 429) {
+            setRateLimited(true);
+          } else {
+            setError(errData.error ?? `Request failed (${res.status})`);
+          }
+        } catch {
+          if (res.status === 429) {
+            setRateLimited(true);
+          } else {
+            setError(`Request failed (${res.status})`);
+          }
         }
-      } else {
-        setError("No prompt in response.");
+        return;
+      }
+
+      if (!res.body) {
+        setError("No response body from generation.");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += dec.decode(value, { stream: true });
+        for (;;) {
+          const idx = buffer.indexOf("\n\n");
+          if (idx < 0) break;
+          const block = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          let event = "message";
+          let dataStr = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) {
+              event = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataStr = line.slice(5).trim();
+            }
+          }
+          if (!dataStr) continue;
+          try {
+            if (event === "token") {
+              const j = JSON.parse(dataStr) as { chunk?: string };
+              if (typeof j.chunk === "string" && j.chunk) {
+                setStreamingPrompt((prev) => prev + j.chunk);
+              }
+            } else if (event === "done") {
+              const j = JSON.parse(dataStr) as { prompt?: string };
+              if (typeof j.prompt === "string") {
+                setPrompt(j.prompt);
+                setStreamingPrompt("");
+                setLastResultWasCustom(false);
+                setLastGenerationKind("quick");
+                setLastManualFocus(null);
+                const parsed = parseGitHubRepoInput(input);
+                if (parsed && typeof window !== "undefined" && !preserveUrl) {
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
+                  );
+                }
+              } else {
+                setError("No prompt in response.");
+              }
+            } else if (event === "error") {
+              const j = JSON.parse(dataStr) as { error?: string };
+              setError(j.error ?? "Request failed");
+            }
+          } catch {
+            // ignore malformed SSE chunk
+          }
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setLoading(false);
       setLoadKind("none");
+      setStreamingPrompt("");
     }
   }, [preserveUrl]);
 
@@ -410,6 +500,7 @@ export function ReversePromptHome({
       setRateLimited(false);
       setMonthlyLimitReached(false);
       setPrompt("");
+      setStreamingPrompt("");
       setCopied(false);
       const isDeep =
         typeof focusOrDeep === "object" && focusOrDeep.mode === "deep";
@@ -592,10 +683,16 @@ export function ReversePromptHome({
                 if (typeof j.message === "string" && j.message) {
                   setManualStatusLine(j.message);
                 }
+              } else if (event === "token") {
+                const j = JSON.parse(dataStr) as { chunk?: string };
+                if (typeof j.chunk === "string" && j.chunk) {
+                  setStreamingPrompt((prev) => prev + j.chunk);
+                }
               } else if (event === "done") {
                 const j = JSON.parse(dataStr) as { prompt?: string };
                 if (typeof j.prompt === "string") {
                   setPrompt(j.prompt);
+                  setStreamingPrompt("");
                   setLastResultWasCustom(true);
                   if (isDeep) {
                     setLastGenerationKind("deep");
@@ -641,6 +738,7 @@ export function ReversePromptHome({
         setLoading(false);
         setLoadKind("none");
         setManualStatusLine("");
+        setStreamingPrompt("");
       }
     },
     [preserveUrl, isSubscriber, subscriberEmail, session?.access_token]
@@ -904,7 +1002,7 @@ export function ReversePromptHome({
   }, [isAuthenticated, session?.access_token]);
 
   useEffect(() => {
-    if (!prompt) return;
+    if (!prompt && !streamingPrompt) return;
     const id = requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -912,11 +1010,12 @@ export function ReversePromptHome({
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [prompt]);
+  }, [prompt, streamingPrompt]);
 
   const reverseEngineeredRepo = useMemo(
-    () => (prompt ? parseGitHubRepoInput(repoUrl) : null),
-    [prompt, repoUrl]
+    () =>
+      prompt || streamingPrompt ? parseGitHubRepoInput(repoUrl) : null,
+    [prompt, streamingPrompt, repoUrl]
   );
 
   async function copyPrompt() {
@@ -1150,8 +1249,14 @@ export function ReversePromptHome({
                     >
                       {manualStatusLine}
                     </p>
-                  ) : (
-                    <ReverseGenerationFlavorText />
+                  ) : streamingPrompt ? null : (
+                    <p
+                      className="min-h-[1.25rem] text-sm text-zinc-600"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Generating…
+                    </p>
                   )}
                 </div>
               ) : null}
@@ -1243,7 +1348,7 @@ export function ReversePromptHome({
           </div>
         </div>
 
-        {prompt ? (
+        {prompt || (loading && streamingPrompt) ? (
           <div
             ref={resultsRef}
             data-results
@@ -1283,38 +1388,47 @@ export function ReversePromptHome({
                       </span>
                     </a>
                   ) : null}
-                  <div className="group relative">
-                    <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
-                    <button
-                      type="button"
-                      onClick={copyPrompt}
-                      className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-xs font-medium text-zinc-900 transition-transform group-hover:-translate-x-px group-hover:-translate-y-px"
-                    >
-                      {copied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
+                  {prompt ? (
+                    <div className="group relative">
+                      <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
+                      <button
+                        type="button"
+                        onClick={copyPrompt}
+                        className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-xs font-medium text-zinc-900 transition-transform group-hover:-translate-x-px group-hover:-translate-y-px"
+                      >
+                        {copied ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
-                <ReactMarkdown
-                  components={{
-                    h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold first:mt-0">{children}</h1>,
-                    h2: ({ children }) => <h2 className="mb-2 mt-4 text-sm font-bold first:mt-0">{children}</h2>,
-                    h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-semibold first:mt-0">{children}</h3>,
-                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-0.5">{children}</ul>,
-                    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-0.5">{children}</ol>,
-                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                    em: ({ children }) => <em className="italic">{children}</em>,
-                    code: ({ children }) => <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs">{children}</code>,
-                    pre: ({ children }) => <pre className="mb-2 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs">{children}</pre>,
-                    hr: () => <hr className="my-3 border-zinc-200" />,
-                    blockquote: ({ children }) => <blockquote className="border-l-2 border-zinc-300 pl-3 text-zinc-600">{children}</blockquote>,
-                  }}
-                >
-                  {prompt}
-                </ReactMarkdown>
+                {prompt ? (
+                  <ReactMarkdown
+                    components={{
+                      h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold first:mt-0">{children}</h1>,
+                      h2: ({ children }) => <h2 className="mb-2 mt-4 text-sm font-bold first:mt-0">{children}</h2>,
+                      h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-semibold first:mt-0">{children}</h3>,
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-0.5">{children}</ul>,
+                      ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-0.5">{children}</ol>,
+                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      code: ({ children }) => <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs">{children}</code>,
+                      pre: ({ children }) => <pre className="mb-2 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs">{children}</pre>,
+                      hr: () => <hr className="my-3 border-zinc-200" />,
+                      blockquote: ({ children }) => <blockquote className="border-l-2 border-zinc-300 pl-3 text-zinc-600">{children}</blockquote>,
+                    }}
+                  >
+                    {prompt}
+                  </ReactMarkdown>
+                ) : (
+                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-800">
+                    {streamingPrompt}
+                    <span className="animate-pulse">▌</span>
+                  </pre>
+                )}
               </div>
               {!lastResultWasCustom && !loading ? (
                 <p className="mt-4 text-center text-sm text-zinc-600">
