@@ -14,6 +14,26 @@ function getStripeClient(): Stripe | null {
   });
 }
 
+/** Stripe allows duplicate customers per email; active subs may not be on the first page item. */
+async function listStripeCustomersByEmail(
+  stripe: Stripe,
+  email: string
+): Promise<Stripe.Customer[]> {
+  const customers: Stripe.Customer[] = [];
+  let startingAfter: string | undefined;
+  for (;;) {
+    const page = await stripe.customers.list({
+      email: email.trim(),
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    customers.push(...page.data);
+    if (!page.has_more || page.data.length === 0) break;
+    startingAfter = page.data[page.data.length - 1]?.id;
+  }
+  return customers;
+}
+
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
@@ -80,35 +100,35 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const customers = await stripe.customers.list({
-      email: user.email.trim(),
-      limit: 1,
-    });
-    const customerId = customers.data[0]?.id;
-    if (!customerId) {
+    const customers = await listStripeCustomersByEmail(stripe, user.email.trim());
+    if (customers.length === 0) {
       return NextResponse.json(
         { error: "No Stripe customer found for this account" },
         { status: 400 }
       );
     }
 
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "active",
-      limit: 10,
-    });
+    const canceledIds: string[] = [];
+    let primaryCustomerId: string | null = null;
 
-    if (subscriptions.data.length === 0) {
+    for (const customer of customers) {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customer.id,
+        status: "active",
+        limit: 100,
+      });
+      for (const sub of subscriptions.data) {
+        const canceled = await stripe.subscriptions.cancel(sub.id);
+        canceledIds.push(canceled.id);
+        primaryCustomerId ??= customer.id;
+      }
+    }
+
+    if (canceledIds.length === 0) {
       return NextResponse.json(
         { error: "No active subscription found" },
         { status: 400 }
       );
-    }
-
-    const canceledIds: string[] = [];
-    for (const sub of subscriptions.data) {
-      const canceled = await stripe.subscriptions.cancel(sub.id);
-      canceledIds.push(canceled.id);
     }
 
     const userClient = createClient(url, publishableKey, {
@@ -120,7 +140,7 @@ export async function POST(req: NextRequest) {
       .insert({
         user_id: user.id,
         cancellation_reason: reason,
-        stripe_customer_id: customerId,
+        stripe_customer_id: primaryCustomerId ?? customers[0]!.id,
         stripe_subscription_ids: canceledIds,
         canceled_at: new Date().toISOString(),
       });
