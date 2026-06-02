@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
+import { FooterEmailLink } from "@/components/footer-email-link";
 
 type PromptEntry = {
   id: number;
@@ -311,7 +312,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
       </main>
 
       <footer className="border-t border-zinc-200 py-6 text-center text-sm text-zinc-500">
-        <div className="mx-auto flex max-w-4xl justify-center px-4 sm:px-6">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-2 px-4 sm:px-6">
           <a
             href="https://discord.gg/bhEMbZMHS"
             target="_blank"
@@ -329,6 +330,10 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
             </svg>
             Discord
           </a>
+          <span className="text-zinc-300" aria-hidden>
+            ·
+          </span>
+          <FooterEmailLink />
         </div>
       </footer>
     </div>
