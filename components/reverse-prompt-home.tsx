@@ -652,8 +652,9 @@ export function ReversePromptHome({
     const input = repoUrl.trim();
     const parsed = parseGitHubRepoInput(input);
     if (!parsed) return;
-    if (!isAuthenticated) {
-      openAuthModalWithPending({ type: "deep", repoUrl: input });
+    if (!isSubscriber) {
+      saveReturnPath();
+      void router.push("/premium");
       return;
     }
     if (!initialRepoInput?.trim()) {
@@ -666,16 +667,16 @@ export function ReversePromptHome({
   }, [
     loading,
     repoUrl,
-    isAuthenticated,
+    isSubscriber,
     initialRepoInput,
     router,
     runCustomReverse,
-    openAuthModalWithPending,
   ]);
 
   /** Resume Deep / Manual after GitHub popup sign-in (sessionStorage). */
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (!subscriberHydrated) return;
     let raw: string | null = null;
     try {
       raw = sessionStorage.getItem(PENDING_AUTH_KEY);
@@ -691,11 +692,16 @@ export function ReversePromptHome({
       return;
     }
     if (action.type === "deep") {
+      if (!isSubscriber) {
+        saveReturnPath();
+        void router.push("/premium");
+        return;
+      }
       void runCustomReverse(action.repoUrl, { mode: "deep" });
     } else if (action.type === "manual") {
       void runCustomReverse(action.repoUrl, action.focus);
     }
-  }, [isAuthenticated, runCustomReverse]);
+  }, [isAuthenticated, subscriberHydrated, isSubscriber, router, runCustomReverse]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -765,8 +771,9 @@ export function ReversePromptHome({
     if (!trimmed || !parseGitHubRepoInput(trimmed)) return;
 
     if (autoSubmitDeep) {
-      if (!isAuthenticated) {
-        setShowAuthModal(true);
+      if (!isSubscriber) {
+        saveReturnPath();
+        void router.replace("/premium");
         return;
       }
       autoSubmitStartedRef.current = true;
@@ -796,7 +803,17 @@ export function ReversePromptHome({
     runCustomReverse,
     runReversePrompt,
     isAuthenticated,
+    isSubscriber,
+    router,
   ]);
+
+  useEffect(() => {
+    if (!subscriberHydrated) return;
+    if (!preserveUrl || initialGenerationKind !== "deep") return;
+    if (isSubscriber) return;
+    saveReturnPath();
+    void router.replace("/premium");
+  }, [subscriberHydrated, isSubscriber, preserveUrl, initialGenerationKind, router]);
 
   /* `/owner/repo` uses quick auto-submit; `/owner/repo/deep` and `/owner/repo/<focus>` use the branches above. */
 
