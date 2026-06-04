@@ -381,7 +381,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
           <LibraryNavLink isActive={pathname === "/library"} />
 
-          {isSubscriber ? (
+          {!isSubscriber ? (
             <>
               <NavDivider />
               <PremiumNavLink isSubscriber={isSubscriber} />
