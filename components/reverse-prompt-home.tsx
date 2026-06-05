@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FooterEmailLink } from "@/components/footer-email-link";
+
 import ReactMarkdown from "react-markdown";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
@@ -1378,7 +1378,12 @@ export function ReversePromptHome({
           <span className="text-zinc-300" aria-hidden>
             ·
           </span>
-          <FooterEmailLink />
+          <Link
+            href="/sponsor"
+            className="font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-900"
+          >
+            Sponsor
+          </Link>
         </div>
       </footer>
 
