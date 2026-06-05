@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
-import { FooterEmailLink } from "@/components/footer-email-link";
+
 
 type PromptEntry = {
   id: number;
@@ -333,7 +333,12 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
           <span className="text-zinc-300" aria-hidden>
             ·
           </span>
-          <FooterEmailLink />
+          <Link
+            href="/sponsor"
+            className="font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-900"
+          >
+            Sponsor
+          </Link>
         </div>
       </footer>
     </div>
