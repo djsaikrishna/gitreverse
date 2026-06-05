@@ -17,7 +17,7 @@ const reachStats: Stat[] = [
   },
   { value: "13,000+", label: "Visitors this week" },
   { value: "35,000+", label: "Monthly visitors" },
-  { value: "2,270+", label: "GitHub-authenticated users" },
+  { value: "2,200+", label: "GitHub-authenticated users" },
   { value: "1,000+", label: "GitHub stars" },
   { value: "Growing", label: "Active Discord community" },
 ];
@@ -182,8 +182,8 @@ export function SponsorPage() {
         <div className="mx-auto max-w-5xl">
           <section>
             <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.04] tracking-tight text-zinc-900 sm:text-5xl lg:text-[3.5rem]">
-              Reach developers while they&apos;re actively{" "}
-              <span className="text-[#d31611]">getting a build-ready prompt</span>
+              Reach developers while they&apos;re{" "}
+              <span className="text-[#d31611]">planning to build something</span>
               .
             </h1>
             <p className="mt-5 max-w-3xl text-lg leading-7 text-zinc-600">
