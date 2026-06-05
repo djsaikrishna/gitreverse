@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AUTH_SKIP, isSupabaseAuthConfigured } from "@/lib/supabase-auth";
+import { fetchSubscriptionStatus } from "@/lib/subscription-status-client";
 import type { User } from "@supabase/supabase-js";
 
 function IconBooks({ className }: { className?: string }) {
@@ -108,7 +109,6 @@ function IconLogOut({ size = 15 }: { size?: number }) {
   );
 }
 
-const SUBSCRIBER_EMAIL_KEY = "gr_subscriber_email";
 const CANCEL_REASON_MIN_LEN = 10;
 
 function userDisplayName(user: User): string {
@@ -232,23 +232,31 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
   const authUiEnabled =
     Boolean(!AUTH_SKIP && isSupabaseAuthConfigured());
 
-  const [subscriberFromStorage, setSubscriberFromStorage] = useState(false);
+  const [subscriptionFromApi, setSubscriptionFromApi] = useState(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const read = () => {
-      try {
-        const v = localStorage.getItem(SUBSCRIBER_EMAIL_KEY);
-        setSubscriberFromStorage(Boolean(v?.trim()));
-      } catch {
-        setSubscriberFromStorage(false);
-      }
-    };
-    read();
-    window.addEventListener("storage", read);
-    return () => window.removeEventListener("storage", read);
-  }, []);
+    const token = session?.access_token;
+    if (!token) {
+      setSubscriptionFromApi(false);
+      return;
+    }
 
-  const isSubscriber = Boolean(isSubscriberProp) || subscriberFromStorage;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const subscribed = await fetchSubscriptionStatus(token);
+        if (!cancelled) setSubscriptionFromApi(subscribed);
+      } catch {
+        if (!cancelled) setSubscriptionFromApi(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
+
+  const isSubscriber =
+    Boolean(isSubscriberProp) || subscriptionFromApi;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -310,12 +318,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
         return;
       }
 
-      try {
-        localStorage.removeItem(SUBSCRIBER_EMAIL_KEY);
-      } catch {
-        /* ignore */
-      }
-      setSubscriberFromStorage(false);
+      setSubscriptionFromApi(false);
       setCancelSuccess(true);
       setCancelLoading(false);
       window.setTimeout(() => {

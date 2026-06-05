@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { getAuthenticatedUser } from "@/lib/auth-request";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,14 @@ function getStripeClient(): Stripe | null {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) {
+    return NextResponse.json(
+      { error: "Authorization header required" },
+      { status: 401 }
+    );
+  }
+
   const stripe = getStripeClient();
   if (!stripe) {
     return NextResponse.json(
@@ -44,6 +53,12 @@ export async function POST(req: NextRequest) {
       success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/`,
       allow_promotion_codes: true,
+      client_reference_id: user.id,
+      customer_email: user.email ?? undefined,
+      metadata: { supabase_user_id: user.id },
+      subscription_data: {
+        metadata: { supabase_user_id: user.id },
+      },
     });
 
     const url = session.url;

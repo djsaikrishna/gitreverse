@@ -5,8 +5,7 @@ import { URL } from "node:url";
 import { enforceCustomReverseRateLimit } from "@/lib/custom-reverse-rate-limit";
 import { DEEP_REVERSE_FOCUS, focusFingerprint } from "@/lib/focus-fingerprint";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
-import { checkActiveSubscriber } from "@/lib/subscriber";
-import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
+import { isPremiumFromRequest } from "@/lib/subscriber";
 import { getSupabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -427,8 +426,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (isDeep && process.env.NODE_ENV !== "development") {
-    const subEmail = request.headers.get(SUBSCRIBER_EMAIL_HEADER)?.trim();
-    const active = subEmail ? await checkActiveSubscriber(subEmail) : false;
+    const active = await isPremiumFromRequest(request);
     if (!active) {
       return NextResponse.json({ error: "premium_required" }, { status: 403 });
     }

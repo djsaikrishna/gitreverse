@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { HOME_EXAMPLES } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
 import { PAYMENT_LINK, saveReturnPath } from "@/lib/stripe-checkout-navigate";
-import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
+import { fetchSubscriptionStatus } from "@/lib/subscription-status-client";
 import {
   type HistoryEntry,
   historyPromptPreview,
@@ -25,7 +25,6 @@ import {
 
 const RL_KEY_MONTHLY = "gr_rl_monthly";
 const MONTHLY_CUSTOM_LIMIT = 1;
-const SUBSCRIBER_EMAIL_KEY = "gr_subscriber_email";
 const PENDING_REDIRECT_KEY = "gr_pending_redirect";
 const CHECKOUT_NAVIGATION_STATE_KEY = "gr_checkout_navigation_state";
 const CHECKOUT_RETURNED_STATE = "returned";
@@ -188,7 +187,6 @@ export function ReversePromptHome({
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [monthlyLimitReached, setMonthlyLimitReached] = useState(false);
-  const [subscriberEmail, setSubscriberEmail] = useState<string | null>(null);
   const [isSubscriber, setIsSubscriber] = useState(false);
   const [subscriberHydrated, setSubscriberHydrated] = useState(false);
   const [checkoutVerifyState, setCheckoutVerifyState] = useState<
@@ -254,7 +252,7 @@ export function ReversePromptHome({
     }
   }, []);
 
-  /** Stripe Payment Link return URL + restore subscriber from localStorage. */
+  /** Stripe checkout return + Premium status from logged-in user. */
   useEffect(() => {
     if (typeof window === "undefined") return;
     let cancelled = false;
@@ -262,6 +260,7 @@ export function ReversePromptHome({
     async function hydrateSubscriber() {
       const params = new URLSearchParams(window.location.search);
       const sessionId = params.get("session_id")?.trim();
+      const token = session?.access_token;
 
       if (!sessionId) {
         localStorage.removeItem(PENDING_REDIRECT_KEY);
@@ -270,15 +269,20 @@ export function ReversePromptHome({
       if (sessionId) {
         setCheckoutVerifyState("verifying");
         try {
+          const headers: Record<string, string> = {};
+          if (token) headers.Authorization = `Bearer ${token}`;
           const res = await fetch(
-            `/api/verify-subscription?session_id=${encodeURIComponent(sessionId)}`
+            `/api/verify-subscription?session_id=${encodeURIComponent(sessionId)}`,
+            { headers }
           );
-          const data = (await res.json()) as { email?: string; error?: string };
+          const data = (await res.json()) as {
+            email?: string;
+            subscribed?: boolean;
+            error?: string;
+          };
           if (cancelled) return;
-          if (res.ok && typeof data.email === "string" && data.email) {
+          if (res.ok && data.subscribed === true) {
             clearCheckoutNavigationState();
-            localStorage.setItem(SUBSCRIBER_EMAIL_KEY, data.email);
-            setSubscriberEmail(data.email);
             setIsSubscriber(true);
             setMonthlyLimitReached(false);
             setCheckoutVerifyState("idle");
@@ -299,47 +303,17 @@ export function ReversePromptHome({
         return;
       }
 
-      const stored = localStorage.getItem(SUBSCRIBER_EMAIL_KEY)?.trim();
-      if (stored) {
+      if (token) {
         try {
-          const res = await fetch(
-            `/api/check-subscription?email=${encodeURIComponent(stored)}`
-          );
-          const data = (await res.json()) as { subscribed?: boolean };
-          if (cancelled) return;
-          if (data.subscribed) {
-            setSubscriberEmail(stored);
-            setIsSubscriber(true);
-          } else {
-            localStorage.removeItem(SUBSCRIBER_EMAIL_KEY);
-            setSubscriberEmail(null);
-            setIsSubscriber(false);
-          }
+          const subscribed = await fetchSubscriptionStatus(token);
+          if (!cancelled) setIsSubscriber(subscribed);
         } catch {
-          if (!cancelled) {
-            setSubscriberEmail(null);
-            setIsSubscriber(false);
-          }
+          if (!cancelled) setIsSubscriber(false);
         }
-      } else {
-        const authEmail = session?.user?.email?.trim();
-        if (authEmail) {
-          try {
-            const res = await fetch(
-              `/api/check-subscription?email=${encodeURIComponent(authEmail)}`
-            );
-            const data = (await res.json()) as { subscribed?: boolean };
-            if (cancelled) return;
-            if (data.subscribed) {
-              localStorage.setItem(SUBSCRIBER_EMAIL_KEY, authEmail);
-              setSubscriberEmail(authEmail);
-              setIsSubscriber(true);
-            }
-          } catch {
-            /* ignore */
-          }
-        }
+      } else if (!cancelled) {
+        setIsSubscriber(false);
       }
+
       if (!cancelled) setSubscriberHydrated(true);
     }
 
@@ -347,7 +321,7 @@ export function ReversePromptHome({
     return () => {
       cancelled = true;
     };
-  }, [router, session]);
+  }, [router, session?.access_token]);
 
   /** Close auth modal after successful sign-in (popup flow). */
   useEffect(() => {
@@ -414,7 +388,7 @@ export function ReversePromptHome({
       setCopied(false);
       const isDeep =
         typeof focusOrDeep === "object" && focusOrDeep.mode === "deep";
-      const bypassQuota = Boolean(isSubscriber && subscriberEmail?.trim());
+      const bypassQuota = isSubscriber;
       if (
         !bypassQuota &&
         getRLEntry(RL_KEY_MONTHLY).count >= MONTHLY_CUSTOM_LIMIT
@@ -440,9 +414,6 @@ export function ReversePromptHome({
             "Content-Type": "application/json",
             ...(session?.access_token
               ? { Authorization: `Bearer ${session.access_token}` }
-              : {}),
-            ...(subscriberEmail
-              ? { [SUBSCRIBER_EMAIL_HEADER]: subscriberEmail }
               : {}),
           },
           body: JSON.stringify(bodyObj),
@@ -644,7 +615,7 @@ export function ReversePromptHome({
         setManualStatusLine("");
       }
     },
-    [preserveUrl, isSubscriber, subscriberEmail, session?.access_token]
+    [preserveUrl, isSubscriber, session?.access_token]
   );
 
   const startDeepReverse = useCallback(() => {
@@ -994,8 +965,8 @@ export function ReversePromptHome({
               Payment is still syncing
             </p>
             <p className="mt-2 text-sm text-amber-800">
-              Wait a few seconds and retry — we pull your email from Stripe as
-              soon as it lands in the database.
+              Wait a few seconds and retry — we link your subscription to your
+              account as soon as Stripe syncs.
             </p>
             <button
               type="button"
@@ -1006,14 +977,20 @@ export function ReversePromptHome({
                 if (!sid) return;
                 setCheckoutVerifyState("verifying");
                 try {
+                  const headers: Record<string, string> = {};
+                  if (session?.access_token) {
+                    headers.Authorization = `Bearer ${session.access_token}`;
+                  }
                   const res = await fetch(
-                    `/api/verify-subscription?session_id=${encodeURIComponent(sid)}`
+                    `/api/verify-subscription?session_id=${encodeURIComponent(sid)}`,
+                    { headers }
                   );
-                  const data = (await res.json()) as { email?: string };
-                  if (res.ok && typeof data.email === "string" && data.email) {
+                  const data = (await res.json()) as {
+                    email?: string;
+                    subscribed?: boolean;
+                  };
+                  if (res.ok && data.subscribed === true) {
                     clearCheckoutNavigationState();
-                    localStorage.setItem(SUBSCRIBER_EMAIL_KEY, data.email);
-                    setSubscriberEmail(data.email);
                     setIsSubscriber(true);
                     setMonthlyLimitReached(false);
                     setCheckoutVerifyState("idle");
