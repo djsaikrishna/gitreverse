@@ -5,8 +5,7 @@ import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { beginStripeCheckout, PAYMENT_LINK } from "@/lib/stripe-checkout-navigate";
-
-const SUBSCRIBER_EMAIL_KEY = "gr_subscriber_email";
+import { fetchSubscriptionStatus } from "@/lib/subscription-status-client";
 
 function IconCheck({ size = 16 }: { size?: number }) {
   return (
@@ -46,55 +45,37 @@ function FeatureRow({ title, description }: FeatureRowProps) {
 }
 
 export function PremiumPage() {
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { session, isAuthenticated, isLoading: authLoading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [subscriberFromStorage, setSubscriberFromStorage] = useState<boolean | null>(
-    null
-  );
+  const [isSubscriber, setIsSubscriber] = useState(false);
+  const [statusLoaded, setStatusLoaded] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const read = () => {
-      try {
-        const v = localStorage.getItem(SUBSCRIBER_EMAIL_KEY);
-        setSubscriberFromStorage(Boolean(v?.trim()));
-      } catch {
-        setSubscriberFromStorage(false);
-      }
-    };
-    read();
-    window.addEventListener("storage", read);
-    return () => window.removeEventListener("storage", read);
-  }, []);
-
-  useEffect(() => {
-    if (subscriberFromStorage === true) return;
-    const authEmail = user?.email?.trim();
-    if (!authEmail) return;
+    const token = session?.access_token;
+    if (!token) {
+      setIsSubscriber(false);
+      setStatusLoaded(!authLoading);
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(
-          `/api/check-subscription?email=${encodeURIComponent(authEmail)}`
-        );
-        const data = (await res.json()) as { subscribed?: boolean };
-        if (cancelled) return;
-        if (data.subscribed) {
-          localStorage.setItem(SUBSCRIBER_EMAIL_KEY, authEmail);
-          setSubscriberFromStorage(true);
-        }
+        const subscribed = await fetchSubscriptionStatus(token);
+        if (!cancelled) setIsSubscriber(subscribed);
       } catch {
-        /* ignore */
+        if (!cancelled) setIsSubscriber(false);
+      } finally {
+        if (!cancelled) setStatusLoaded(true);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [user, subscriberFromStorage]);
+  }, [session?.access_token, authLoading]);
 
   useEffect(() => {
     if (!pendingCheckout || !isAuthenticated || authLoading) return;
@@ -102,10 +83,10 @@ export function PremiumPage() {
     setShowAuthModal(false);
     if (!PAYMENT_LINK.trim()) return;
     setCheckoutBusy(true);
-    void beginStripeCheckout().finally(() => {
+    void beginStripeCheckout(session?.access_token).finally(() => {
       setCheckoutBusy(false);
     });
-  }, [pendingCheckout, isAuthenticated, authLoading]);
+  }, [pendingCheckout, isAuthenticated, authLoading, session?.access_token]);
 
   const handleAuthModalClose = useCallback(() => {
     setShowAuthModal(false);
@@ -113,7 +94,7 @@ export function PremiumPage() {
   }, []);
 
   const handleSubscribe = useCallback(() => {
-    if (subscriberFromStorage) return;
+    if (isSubscriber) return;
     if (authLoading) return;
     if (!PAYMENT_LINK.trim()) return;
     if (!isAuthenticated) {
@@ -122,15 +103,15 @@ export function PremiumPage() {
       return;
     }
     setCheckoutBusy(true);
-    void beginStripeCheckout().finally(() => {
+    void beginStripeCheckout(session?.access_token).finally(() => {
       setCheckoutBusy(false);
     });
-  }, [subscriberFromStorage, authLoading, isAuthenticated]);
+  }, [isSubscriber, authLoading, isAuthenticated, session?.access_token]);
 
-  const isSubscriber = subscriberFromStorage === true;
   const ctaDisabled =
     checkoutBusy ||
     authLoading ||
+    !statusLoaded ||
     !PAYMENT_LINK.trim() ||
     isSubscriber;
 
@@ -138,13 +119,13 @@ export function PremiumPage() {
     if (isSubscriber) return "You’re already on Premium";
     if (!PAYMENT_LINK.trim()) return "Checkout unavailable";
     if (checkoutBusy) return "Processing…";
-    if (authLoading) return "…";
+    if (authLoading || !statusLoaded) return "…";
     return "Subscribe Now";
   })();
 
   return (
     <div className="min-h-[100vh] bg-[#fffdf8] text-zinc-900">
-      <Navbar />
+      <Navbar isSubscriber={isSubscriber} />
 
       {/* Hero */}
       <div className="mx-auto flex max-w-4xl flex-col items-center px-6 pb-3 pt-12 text-center sm:px-8 sm:pt-16 md:pb-4">

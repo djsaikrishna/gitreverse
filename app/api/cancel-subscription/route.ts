@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
+import { getAuthenticatedUser } from "@/lib/auth-request";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,28 @@ async function listStripeCustomersByEmail(
   return customers;
 }
 
+/** Active Stripe customers linked to this Supabase user via metadata. */
+async function listStripeCustomersByUserId(
+  userId: string
+): Promise<Stripe.Customer[]> {
+  const stripe = getStripeClient();
+  if (!stripe) return [];
+
+  try {
+    const result = await stripe.customers.search({
+      query: `metadata['supabase_user_id']:'${userId}'`,
+      limit: 100,
+    });
+    return result.data;
+  } catch (err) {
+    console.warn(
+      "[cancel-subscription] customer search:",
+      err instanceof Error ? err.message : String(err)
+    );
+    return [];
+  }
+}
+
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
@@ -53,13 +76,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const supabaseAuth = createClient(url, publishableKey);
-  const {
-    data: { user },
-    error: userError,
-  } = await supabaseAuth.auth.getUser(token);
-
-  if (userError || !user?.id || !user.email?.trim()) {
+  const user = await getAuthenticatedUser(req);
+  if (!user?.id) {
     return NextResponse.json({ error: "User not authenticated" }, { status: 401 });
   }
 
@@ -100,7 +118,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const customers = await listStripeCustomersByEmail(stripe, user.email.trim());
+    let customers = await listStripeCustomersByUserId(user.id);
+    if (customers.length === 0 && user.email) {
+      customers = await listStripeCustomersByEmail(stripe, user.email);
+    }
     if (customers.length === 0) {
       return NextResponse.json(
         { error: "No Stripe customer found for this account" },

@@ -26,13 +26,20 @@ function savePendingRedirect(): void {
   saveReturnPath();
 }
 
-export async function beginStripeCheckout(): Promise<void> {
+export async function beginStripeCheckout(
+  accessToken?: string | null
+): Promise<void> {
   if (typeof window === "undefined") return;
   if (!PAYMENT_LINK) return;
   savePendingRedirect();
   try {
+    const headers: Record<string, string> = {};
+    if (accessToken?.trim()) {
+      headers.Authorization = `Bearer ${accessToken.trim()}`;
+    }
     const res = await fetch("/api/create-checkout", {
       method: "POST",
+      headers,
     });
     const data = (await res.json()) as { url?: string };
     if (!res.ok || !data.url) {
