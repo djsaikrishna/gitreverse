@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAuthenticatedUser } from "@/lib/auth-request";
-import { STRIPE_PRICE_IDS, type BillingPlan } from "@/lib/billing-config";
+import {
+  canUpgradeToPlan,
+  STRIPE_PRICE_IDS,
+  type BillingPlan,
+} from "@/lib/billing-config";
 import { getBillingStatus } from "@/lib/subscriber";
 
 export const runtime = "nodejs";
@@ -65,19 +69,6 @@ function priceIdForPlan(plan: UpgradablePlan): string {
   }
 }
 
-function nextPlanFor(plan: BillingPlan): UpgradablePlan | null {
-  switch (plan) {
-    case "free":
-      return "starter";
-    case "starter":
-      return "pro";
-    case "pro":
-      return "unlimited";
-    default:
-      return null;
-  }
-}
-
 export async function POST(req: NextRequest) {
   const user = await getAuthenticatedUser(req);
   if (!user?.id) {
@@ -125,12 +116,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const expectedNextPlan = nextPlanFor(status.plan);
-  if (!expectedNextPlan || targetPlan !== expectedNextPlan) {
+  if (!canUpgradeToPlan(status.plan, targetPlan)) {
     return NextResponse.json(
       {
         error: "invalid_upgrade_path",
-        message: "Only the next plan upgrade is supported.",
+        message: "Only upgrades to a higher paid tier are supported.",
       },
       { status: 400 }
     );

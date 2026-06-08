@@ -42,6 +42,14 @@ export const FREE_MANUAL_LIMIT = 1;
 export const STARTER_LIMIT = 3;
 export const PRO_LIMIT = 10;
 
+export const PLAN_RANK: Record<BillingPlan, number> = {
+  free: 0,
+  starter: 1,
+  pro: 2,
+  unlimited: 3,
+  legacy_unlimited: 4,
+};
+
 export function isPaidPlan(plan: BillingPlan): plan is PaidBillingPlan {
   return plan !== "free";
 }
@@ -59,6 +67,14 @@ export function getNextPlan(
     default:
       return null;
   }
+}
+
+export function canUpgradeToPlan(
+  currentPlan: BillingPlan,
+  targetPlan: Extract<BillingPlan, "starter" | "pro" | "unlimited">
+): boolean {
+  if (currentPlan === "legacy_unlimited") return false;
+  return PLAN_RANK[targetPlan] > PLAN_RANK[currentPlan];
 }
 
 export function getPlanLabel(plan: BillingPlan): string {

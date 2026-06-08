@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AuthModal } from "@/components/auth/AuthModal";
 import {
   buildDefaultBillingStatus,
+  canUpgradeToPlan,
   getPlanLabel,
-  type BillingPlan,
   type BillingStatus,
 } from "@/lib/billing-config";
 import { Navbar } from "@/components/navbar";
@@ -46,18 +46,11 @@ function FeatureRow({ title }: { title: string }) {
   );
 }
 
-const PLAN_RANK: Record<BillingPlan, number> = {
-  free: 0,
-  starter: 1,
-  pro: 2,
-  unlimited: 3,
-  legacy_unlimited: 4,
-};
-
 const PLAN_CARDS: Array<{
   plan: CheckoutPlan;
   price: string;
   title: string;
+  recommended?: boolean;
   features: string[];
 }> = [
   {
@@ -67,13 +60,14 @@ const PLAN_CARDS: Array<{
     features: [
       "3 deep reverse per month",
       "3 manual control per month",
-      "A simple upgrade from the free tier",
+      "A solid starting point for lighter workflows",
     ],
   },
   {
     plan: "pro",
     price: "$19",
     title: "Pro",
+    recommended: true,
     features: [
       "10 deep reverse per month",
       "10 manual control per month",
@@ -87,7 +81,7 @@ const PLAN_CARDS: Array<{
     features: [
       "Unlimited deep reverse",
       "Unlimited manual control",
-      "Protected by invisible abuse caps",
+      "Built for high-volume research workflows",
     ],
   },
 ];
@@ -163,6 +157,10 @@ export function PremiumPage() {
 
   const currentPlan = billingStatus.plan;
   const isSubscriber = billingStatus.subscribed;
+  const canUpgradePlan = useCallback(
+    (plan: CheckoutPlan) => isSubscriber && canUpgradeToPlan(currentPlan, plan),
+    [currentPlan, isSubscriber]
+  );
 
   const handlePlanAction = useCallback(
     (plan: CheckoutPlan) => {
@@ -175,10 +173,13 @@ export function PremiumPage() {
         return;
       }
 
+      if (currentPlan === "legacy_unlimited") return;
+      if (isSubscriber && !canUpgradeToPlan(currentPlan, plan)) return;
+
       setBusyPlan(plan);
 
       const promise =
-        isSubscriber && billingStatus.nextPlan === plan && session?.access_token
+        canUpgradeToPlan(currentPlan, plan) && session?.access_token
           ? changeStripePlan(plan, session.access_token).then(refreshStatus)
           : beginStripeCheckout(plan, session?.access_token);
 
@@ -196,7 +197,6 @@ export function PremiumPage() {
     },
     [
       authLoading,
-      billingStatus.nextPlan,
       currentPlan,
       isAuthenticated,
       isSubscriber,
@@ -207,18 +207,11 @@ export function PremiumPage() {
 
   const actionLabel = (plan: CheckoutPlan): string => {
     if (busyPlan === plan) return "Processing…";
-    if (currentPlan === plan) return `Current: ${getPlanLabel(plan)}`;
-    if (currentPlan === "legacy_unlimited") return "Legacy Unlimited";
-    if (isSubscriber) {
-      if (billingStatus.nextPlan === plan) {
-        return `Upgrade to ${getPlanLabel(plan)}`;
-      }
-      if (PLAN_RANK[plan] < PLAN_RANK[currentPlan]) {
-        return "Not available";
-      }
-      return "Already above this tier";
-    }
-    return `Start ${getPlanLabel(plan)}`;
+    if (currentPlan === plan) return "Current plan";
+    if (currentPlan === "legacy_unlimited") return "Legacy plan active";
+    if (canUpgradePlan(plan)) return `Upgrade to ${getPlanLabel(plan)}`;
+    if (isSubscriber) return "Current plan is higher";
+    return "Subscribe now";
   };
 
   const actionDisabled = (plan: CheckoutPlan): boolean => {
@@ -226,9 +219,7 @@ export function PremiumPage() {
     if (authLoading || !statusLoaded) return true;
     if (currentPlan === plan) return true;
     if (currentPlan === "legacy_unlimited") return true;
-    if (isSubscriber) {
-      return billingStatus.nextPlan !== plan;
-    }
+    if (isSubscriber) return !canUpgradePlan(plan);
     return false;
   };
 
@@ -241,8 +232,8 @@ export function PremiumPage() {
           Reverse more. Build faster.
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-zinc-600 sm:text-base">
-          Choose the plan that matches your workload. Existing $9 unlimited
-          subscribers stay unlimited until renewal, then switch to Starter.
+          Pick the plan that fits your research volume, then upgrade whenever you
+          need more room.
         </p>
       </div>
 
@@ -271,10 +262,19 @@ export function PremiumPage() {
               style={{ transform: "translate(5px,5px)" }}
               aria-hidden
             />
-            <div className="relative flex h-full flex-col gap-4 rounded-lg border-[2.5px] border-zinc-900 bg-[#fff4da] p-5 sm:p-6">
+            <div
+              className="relative flex h-full flex-col gap-4 rounded-lg border-[2.5px] border-zinc-900 bg-[#fff4da] p-5 sm:p-6"
+            >
               <div>
-                <div className="mb-1 text-xs font-semibold tracking-wide text-zinc-600">
-                  {plan.title.toUpperCase()}
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold tracking-wide text-zinc-600">
+                    {plan.title.toUpperCase()}
+                  </div>
+                  {plan.recommended ? (
+                    <span className="inline-flex rounded-full border-2 border-zinc-900 bg-[#d31611] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
+                      Recommended
+                    </span>
+                  ) : null}
                 </div>
                 <div className="text-4xl font-extrabold tracking-tight sm:text-[2.5rem]">
                   {plan.price}
@@ -300,7 +300,11 @@ export function PremiumPage() {
                   type="button"
                   disabled={actionDisabled(plan.plan)}
                   onClick={() => void handlePlanAction(plan.plan)}
-                  className="relative z-10 w-full cursor-pointer rounded-md border-[2.5px] border-zinc-900 bg-[#d31611] px-4 py-2.5 text-sm font-bold text-white transition-transform duration-100 enabled:hover:-translate-x-px enabled:hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-base"
+                  className={`relative z-10 w-full cursor-pointer rounded-md border-[2.5px] border-zinc-900 px-4 py-2.5 text-sm font-bold transition-transform duration-100 enabled:hover:-translate-x-px enabled:hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-base ${
+                    currentPlan === plan.plan
+                      ? "bg-white text-zinc-900"
+                      : "bg-[#d31611] text-white"
+                  }`}
                 >
                   {actionLabel(plan.plan)}
                 </button>
