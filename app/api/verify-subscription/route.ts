@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/auth-request";
 import {
+  getBillingStatus,
   getCheckoutSessionCustomer,
   getEmailFromCheckoutSession,
-  isPremium,
   linkStripeCustomerToUser,
 } from "@/lib/subscriber";
 
@@ -33,17 +33,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const subscribed = user
-    ? await isPremium({
+  const status = user
+    ? await getBillingStatus({
         userId: user.id,
         authEmail: user.email,
         headerEmail: email,
       })
-    : await isPremium({ headerEmail: email });
+    : await getBillingStatus({ headerEmail: email });
 
   return NextResponse.json({
     email,
     linked,
-    subscribed,
+    ...status,
   });
 }

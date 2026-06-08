@@ -11,8 +11,13 @@ import { ReverseGenerationFlavorText } from "@/components/reverse-generation-fla
 import { useAuth } from "@/contexts/AuthContext";
 import { HOME_EXAMPLES } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
-import { PAYMENT_LINK, saveReturnPath } from "@/lib/stripe-checkout-navigate";
-import { fetchSubscriptionStatus } from "@/lib/subscription-status-client";
+import { saveReturnPath } from "@/lib/stripe-checkout-navigate";
+import {
+  buildDefaultBillingStatus,
+  getPlanLabel,
+  type BillingStatus,
+} from "@/lib/billing-config";
+import { fetchBillingStatus } from "@/lib/subscription-status-client";
 import {
   type HistoryEntry,
   historyPromptPreview,
@@ -23,8 +28,6 @@ import {
   writeLocalHistory,
 } from "@/lib/user-history";
 
-const RL_KEY_MONTHLY = "gr_rl_monthly";
-const MONTHLY_CUSTOM_LIMIT = 1;
 const PENDING_REDIRECT_KEY = "gr_pending_redirect";
 const CHECKOUT_NAVIGATION_STATE_KEY = "gr_checkout_navigation_state";
 const CHECKOUT_RETURNED_STATE = "returned";
@@ -70,35 +73,6 @@ function clearCheckoutNavigationState(): void {
   } catch {
     /* storage unavailable */
   }
-}
-
-type RLEntry = { count: number; date: string };
-
-/** Calendar month key for combined deep+manual quota (UTC `YYYY-MM`). */
-function getMonthStr(): string {
-  return new Date().toISOString().slice(0, 7);
-}
-
-function getRLEntry(key: string): RLEntry {
-  if (typeof window === "undefined")
-    return { count: 0, date: getMonthStr() };
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return { count: 0, date: getMonthStr() };
-    const e = JSON.parse(raw) as RLEntry;
-    return e.date === getMonthStr() ? e : { count: 0, date: getMonthStr() };
-  } catch {
-    return { count: 0, date: getMonthStr() };
-  }
-}
-
-function incrementRLEntry(key: string): void {
-  if (typeof window === "undefined") return;
-  const e = getRLEntry(key);
-  localStorage.setItem(
-    key,
-    JSON.stringify({ count: e.count + 1, date: e.date })
-  );
 }
 
 function historySlotFromProps(
@@ -187,7 +161,12 @@ export function ReversePromptHome({
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [monthlyLimitReached, setMonthlyLimitReached] = useState(false);
-  const [isSubscriber, setIsSubscriber] = useState(false);
+  const [limitErrorType, setLimitErrorType] = useState<
+    "monthly_limit_reached" | "daily_limit_reached" | null
+  >(null);
+  const [billingStatus, setBillingStatus] = useState<BillingStatus>(
+    buildDefaultBillingStatus()
+  );
   const [subscriberHydrated, setSubscriberHydrated] = useState(false);
   const [checkoutVerifyState, setCheckoutVerifyState] = useState<
     "idle" | "verifying" | "still_processing"
@@ -212,6 +191,36 @@ export function ReversePromptHome({
   );
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const autoSubmitStartedRef = useRef(false);
+  const isSubscriber = billingStatus.subscribed;
+  const nextPlanLabel = billingStatus.nextPlan
+    ? getPlanLabel(billingStatus.nextPlan)
+    : null;
+  const limitTitle =
+    limitErrorType === "daily_limit_reached"
+      ? "You’ve hit today’s safety limit."
+      : billingStatus.plan === "free"
+        ? "You’ve hit this month’s manual control limit."
+        : `You’ve hit your ${getPlanLabel(billingStatus.plan)} limit.`;
+  const limitCtaLabel =
+    billingStatus.plan === "free"
+      ? "See Starter"
+      : nextPlanLabel
+        ? `Upgrade to ${nextPlanLabel}`
+        : null;
+
+  const refreshBillingStatus = useCallback(async () => {
+    const token = session?.access_token;
+    if (!token) {
+      setBillingStatus(buildDefaultBillingStatus());
+      return;
+    }
+    try {
+      const status = await fetchBillingStatus(token);
+      setBillingStatus(status);
+    } catch {
+      setBillingStatus(buildDefaultBillingStatus());
+    }
+  }, [session?.access_token]);
 
   /** Open Manual control and fill the focus when the URL (or SSR) carries a manual focus segment. */
   useEffect(() => {
@@ -275,16 +284,16 @@ export function ReversePromptHome({
             `/api/verify-subscription?session_id=${encodeURIComponent(sessionId)}`,
             { headers }
           );
-          const data = (await res.json()) as {
+          const data = (await res.json()) as BillingStatus & {
             email?: string;
-            subscribed?: boolean;
             error?: string;
           };
           if (cancelled) return;
           if (res.ok && data.subscribed === true) {
             clearCheckoutNavigationState();
-            setIsSubscriber(true);
+            setBillingStatus(data);
             setMonthlyLimitReached(false);
+            setLimitErrorType(null);
             setCheckoutVerifyState("idle");
             const pendingRedirect = localStorage.getItem(PENDING_REDIRECT_KEY);
             localStorage.removeItem(PENDING_REDIRECT_KEY);
@@ -305,13 +314,13 @@ export function ReversePromptHome({
 
       if (token) {
         try {
-          const subscribed = await fetchSubscriptionStatus(token);
-          if (!cancelled) setIsSubscriber(subscribed);
+          const status = await fetchBillingStatus(token);
+          if (!cancelled) setBillingStatus(status);
         } catch {
-          if (!cancelled) setIsSubscriber(false);
+          if (!cancelled) setBillingStatus(buildDefaultBillingStatus());
         }
       } else if (!cancelled) {
-        setIsSubscriber(false);
+        setBillingStatus(buildDefaultBillingStatus());
       }
 
       if (!cancelled) setSubscriberHydrated(true);
@@ -384,18 +393,11 @@ export function ReversePromptHome({
       setError(null);
       setRateLimited(false);
       setMonthlyLimitReached(false);
+      setLimitErrorType(null);
       setPrompt("");
       setCopied(false);
       const isDeep =
         typeof focusOrDeep === "object" && focusOrDeep.mode === "deep";
-      const bypassQuota = isSubscriber;
-      if (
-        !bypassQuota &&
-        getRLEntry(RL_KEY_MONTHLY).count >= MONTHLY_CUSTOM_LIMIT
-      ) {
-        setMonthlyLimitReached(true);
-        return;
-      }
       setManualStatusLine("Checking if it's cached…");
       setLoadKind("custom");
       setLoading(true);
@@ -428,21 +430,21 @@ export function ReversePromptHome({
             fromCache?: boolean;
           };
           if (!res.ok) {
-            if (res.status === 429) {
+            if (res.status === 429 || res.status === 403) {
               const limitErr =
                 data.error === "monthly_limit_reached" ||
                 data.error === "daily_limit_reached";
               if (limitErr) {
-                if (typeof window !== "undefined") {
-                  localStorage.setItem(
-                    RL_KEY_MONTHLY,
-                    JSON.stringify({
-                      count: MONTHLY_CUSTOM_LIMIT,
-                      date: getMonthStr(),
-                    })
-                  );
-                }
                 setMonthlyLimitReached(true);
+                setLimitErrorType(
+                  data.error === "daily_limit_reached"
+                    ? "daily_limit_reached"
+                    : "monthly_limit_reached"
+                );
+                void refreshBillingStatus();
+              } else if (data.error === "premium_required") {
+                saveReturnPath();
+                void router.push("/premium");
               } else {
                 setRateLimited(true);
               }
@@ -455,8 +457,8 @@ export function ReversePromptHome({
             if (data.fromCache) {
               setManualStatusLine("Loaded from cache");
               await new Promise((r) => setTimeout(r, 450));
-            } else if (typeof window !== "undefined" && !bypassQuota) {
-              incrementRLEntry(RL_KEY_MONTHLY);
+            } else {
+              void refreshBillingStatus();
             }
             setPrompt(data.prompt);
             setLastResultWasCustom(true);
@@ -495,21 +497,21 @@ export function ReversePromptHome({
         if (!res.ok) {
           try {
             const errData = (await res.json()) as { error?: string };
-            if (res.status === 429) {
+            if (res.status === 429 || res.status === 403) {
               const limitErr =
                 errData.error === "monthly_limit_reached" ||
                 errData.error === "daily_limit_reached";
               if (limitErr) {
-                if (typeof window !== "undefined") {
-                  localStorage.setItem(
-                    RL_KEY_MONTHLY,
-                    JSON.stringify({
-                      count: MONTHLY_CUSTOM_LIMIT,
-                      date: getMonthStr(),
-                    })
-                  );
-                }
                 setMonthlyLimitReached(true);
+                setLimitErrorType(
+                  errData.error === "daily_limit_reached"
+                    ? "daily_limit_reached"
+                    : "monthly_limit_reached"
+                );
+                void refreshBillingStatus();
+              } else if (errData.error === "premium_required") {
+                saveReturnPath();
+                void router.push("/premium");
               } else {
                 setRateLimited(true);
               }
@@ -529,10 +531,6 @@ export function ReversePromptHome({
         if (!res.body) {
           setError("No response body from manual control.");
           return;
-        }
-
-        if (typeof window !== "undefined" && !bypassQuota) {
-          incrementRLEntry(RL_KEY_MONTHLY);
         }
 
         const reader = res.body.getReader();
@@ -567,6 +565,7 @@ export function ReversePromptHome({
               } else if (event === "done") {
                 const j = JSON.parse(dataStr) as { prompt?: string };
                 if (typeof j.prompt === "string") {
+                  void refreshBillingStatus();
                   setPrompt(j.prompt);
                   setLastResultWasCustom(true);
                   if (isDeep) {
@@ -615,7 +614,7 @@ export function ReversePromptHome({
         setManualStatusLine("");
       }
     },
-    [preserveUrl, isSubscriber, session?.access_token]
+    [preserveUrl, refreshBillingStatus, router, session?.access_token]
   );
 
   const startDeepReverse = useCallback(() => {
@@ -985,14 +984,14 @@ export function ReversePromptHome({
                     `/api/verify-subscription?session_id=${encodeURIComponent(sid)}`,
                     { headers }
                   );
-                  const data = (await res.json()) as {
+                  const data = (await res.json()) as BillingStatus & {
                     email?: string;
-                    subscribed?: boolean;
                   };
                   if (res.ok && data.subscribed === true) {
                     clearCheckoutNavigationState();
-                    setIsSubscriber(true);
+                    setBillingStatus(data);
                     setMonthlyLimitReached(false);
+                    setLimitErrorType(null);
                     setCheckoutVerifyState("idle");
                     const pendingRedirect = localStorage.getItem(
                       PENDING_REDIRECT_KEY
@@ -1158,22 +1157,22 @@ export function ReversePromptHome({
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <p className="text-sm font-semibold text-zinc-900">
-                      You&apos;ve hit this month&apos;s limit.
+                      {limitTitle}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {PAYMENT_LINK ? (
+                      {limitCtaLabel ? (
                         <Link
                           href="/premium"
                           onClick={saveReturnPath}
                           className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
                         >
-                          Get Unlimited
+                          {limitCtaLabel}
                         </Link>
                       ) : null}
                       <Link
                         href="/library"
                         className={`inline-flex items-center justify-center rounded border-[2px] px-3 py-1.5 text-sm font-semibold transition-colors ${
-                          PAYMENT_LINK
+                          limitCtaLabel
                             ? "border-zinc-400 bg-white text-zinc-800 hover:bg-zinc-50"
                             : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
                         }`}

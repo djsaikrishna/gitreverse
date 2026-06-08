@@ -3,9 +3,10 @@ import http from "node:http";
 import https from "node:https";
 import { URL } from "node:url";
 import { enforceCustomReverseRateLimit } from "@/lib/custom-reverse-rate-limit";
+import type { BillingAction } from "@/lib/billing-config";
 import { DEEP_REVERSE_FOCUS, focusFingerprint } from "@/lib/focus-fingerprint";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
-import { isPremiumFromRequest } from "@/lib/subscriber";
+import { getBillingStatusFromRequest } from "@/lib/subscriber";
 import { getSupabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -171,6 +172,7 @@ async function executeCustomReverse(opts: {
 }): Promise<NextResponse> {
   const { request, repoUrl, customPrompt, isDeep, focus, parsed } = opts;
   const fp = focusFingerprint(focus);
+  const action: BillingAction = isDeep ? "deep_reverse" : "manual_control";
 
   if (parsed) {
     const supabase = getSupabase();
@@ -195,7 +197,7 @@ async function executeCustomReverse(opts: {
     }
   }
 
-  const rateLimited = await enforceCustomReverseRateLimit(request);
+  const rateLimited = await enforceCustomReverseRateLimit(request, action);
   if (rateLimited) return rateLimited;
 
   const base = getServiceUrl().replace(/\/$/, "");
@@ -290,6 +292,7 @@ async function executeCustomReverseStream(opts: {
 }): Promise<NextResponse> {
   const { request, repoUrl, customPrompt, isDeep, focus, parsed } = opts;
   const fp = focusFingerprint(focus);
+  const action: BillingAction = isDeep ? "deep_reverse" : "manual_control";
 
   if (parsed) {
     const supabase = getSupabase();
@@ -314,7 +317,7 @@ async function executeCustomReverseStream(opts: {
     }
   }
 
-  const rateLimited = await enforceCustomReverseRateLimit(request);
+  const rateLimited = await enforceCustomReverseRateLimit(request, action);
   if (rateLimited) return rateLimited;
 
   const base = getServiceUrl().replace(/\/$/, "");
@@ -426,8 +429,8 @@ export async function POST(request: NextRequest) {
   }
 
   if (isDeep && process.env.NODE_ENV !== "development") {
-    const active = await isPremiumFromRequest(request);
-    if (!active) {
+    const status = await getBillingStatusFromRequest(request);
+    if (!status.deepReverse.canUse) {
       return NextResponse.json({ error: "premium_required" }, { status: 403 });
     }
   }

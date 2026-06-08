@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkActiveSubscriber } from "@/lib/subscriber";
+import { getBillingStatus } from "@/lib/subscriber";
 
 export const runtime = "nodejs";
 
@@ -11,13 +11,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "bad_email" }, { status: 400 });
   }
 
-  const subscribed = await checkActiveSubscriber(email);
-  if (subscribed === null) {
-    return NextResponse.json(
-      { subscribed: false, degraded: true },
-      { status: 200 }
-    );
-  }
-
-  return NextResponse.json({ subscribed });
+  const status = await getBillingStatus({ authEmail: email });
+  return NextResponse.json({ subscribed: status.subscribed, plan: status.plan });
 }
