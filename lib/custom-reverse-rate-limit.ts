@@ -1,9 +1,14 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import {
+  extractEmailFromJwtPayload,
+  extractUserIdFromJwtPayload,
+  getBearerToken,
+} from "@/lib/auth-request";
+import type { BillingAction } from "@/lib/billing-config";
 import { getSupabase } from "@/lib/supabase";
-import { isPremiumFromRequest } from "@/lib/subscriber";
+import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
 
-const MONTHLY_LIMIT = 1;
 const RATE_LIMIT_RPC_TIMEOUT_MS = 2500;
 
 /** Skip DB-backed limits while developing locally or when explicitly opted out. */
@@ -20,41 +25,14 @@ function shouldSkipCustomReverseRateLimit(req: NextRequest): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
-function getBearerToken(req: NextRequest): string | null {
-  const auth = req.headers.get("authorization");
-  if (!auth) return null;
-  const m = /^Bearer\s+(.+)$/i.exec(auth.trim());
-  const t = m?.[1]?.trim();
-  return t || null;
-}
-
-/** Read `sub` from Supabase JWT payload (local base64url decode, no network). */
-function extractUserIdFromJwtPayload(token: string): string | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const raw = parts[1];
-    if (!raw) return null;
-    const payload = JSON.parse(
-      Buffer.from(raw, "base64url").toString("utf-8")
-    ) as { sub?: unknown };
-    return typeof payload.sub === "string" ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Enforce monthly per-user limits for non-cached custom reverse. Returns a 429
+/** Enforce plan-aware per-user limits for non-cached custom reverse. Returns a
  * response when over limit; returns `null` to continue (including fail-open on
  * missing token, timeout/DB errors). */
 export async function enforceCustomReverseRateLimit(
-  req: NextRequest
+  req: NextRequest,
+  action: BillingAction
 ): Promise<NextResponse | null> {
   if (shouldSkipCustomReverseRateLimit(req)) {
-    return null;
-  }
-
-  if (await isPremiumFromRequest(req)) {
     return null;
   }
 
@@ -63,14 +41,18 @@ export async function enforceCustomReverseRateLimit(
 
   const token = getBearerToken(req);
   const userId = token ? extractUserIdFromJwtPayload(token) : null;
+  const authEmail = token ? extractEmailFromJwtPayload(token) : null;
+  const headerEmail = req.headers.get(SUBSCRIBER_EMAIL_HEADER)?.trim() ?? null;
   if (!userId) {
     return null;
   }
 
   try {
-    const rpcPromise = supabase.rpc("check_and_increment_user_usage", {
+    const rpcPromise = supabase.rpc("check_and_increment_billing_usage", {
       p_user_id: userId,
-      p_limit: MONTHLY_LIMIT,
+      p_auth_email: authEmail,
+      p_header_email: headerEmail,
+      p_action: action,
     });
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("rl-timeout")), RATE_LIMIT_RPC_TIMEOUT_MS)
@@ -80,18 +62,37 @@ export async function enforceCustomReverseRateLimit(
       console.warn("[custom-reverse] rate limit RPC error:", error.message);
       return null;
     }
-    const payload = data as { allowed?: unknown } | null;
+    const payload = data as
+      | {
+          allowed?: unknown;
+          error?: unknown;
+          remaining?: unknown;
+        }
+      | null;
     const allowed =
       payload != null &&
       typeof payload === "object" &&
       payload.allowed === true;
     if (!allowed) {
+      const errorCode =
+        payload != null &&
+        typeof payload === "object" &&
+        typeof payload.error === "string"
+          ? payload.error
+          : "monthly_limit_reached";
+      const remaining =
+        payload != null &&
+        typeof payload === "object" &&
+        typeof payload.remaining === "number"
+          ? payload.remaining
+          : 0;
+      const status = errorCode === "premium_required" ? 403 : 429;
       return NextResponse.json(
         {
-          error: "monthly_limit_reached",
-          remaining: 0,
+          error: errorCode,
+          remaining,
         },
-        { status: 429 }
+        { status }
       );
     }
   } catch (e) {

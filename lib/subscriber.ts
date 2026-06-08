@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import Stripe from "stripe";
 import { getAuthenticatedUser } from "@/lib/auth-request";
+import {
+  buildDefaultBillingStatus,
+  coerceBillingStatus,
+  type BillingStatus,
+} from "@/lib/billing-config";
 import { getSupabase } from "@/lib/supabase";
 import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
 
@@ -70,46 +75,47 @@ export async function getCheckoutSessionCustomer(
   return null;
 }
 
+async function queryBillingStatus(
+  input: PremiumCheckInput
+): Promise<BillingStatus | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const trimmedUserId = input.userId?.trim() || null;
+  const trimmedAuthEmail = input.authEmail?.trim() || null;
+  const trimmedHeaderEmail = input.headerEmail?.trim() || null;
+
+  const { data, error } = await supabase.rpc("get_billing_status", {
+    p_user_id: trimmedUserId,
+    p_auth_email: trimmedAuthEmail,
+    p_header_email: trimmedHeaderEmail,
+  });
+  if (error) {
+    console.warn("[subscriber] get_billing_status:", error.message);
+    return null;
+  }
+  return coerceBillingStatus(data);
+}
+
 /** Whether `email` has an active subscription in synced `stripe` tables. */
 export async function checkActiveSubscriber(
   email: string
 ): Promise<boolean | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
   const trimmed = email.trim();
   if (!trimmed) return false;
-
-  const { data, error } = await supabase.rpc("check_active_subscriber", {
-    p_email: trimmed,
-  });
-  if (error) {
-    console.warn("[subscriber] check_active_subscriber:", error.message);
-    return null;
-  }
-  return data === true;
+  const status = await queryBillingStatus({ authEmail: trimmed });
+  if (!status) return null;
+  return status.subscribed;
 }
 
 /** Whether `userId` has an active subscription linked via Stripe customer metadata. */
 export async function checkActiveSubscriberByUserId(
   userId: string
 ): Promise<boolean | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
   const trimmed = userId.trim();
   if (!trimmed) return false;
-
-  const { data, error } = await supabase.rpc(
-    "check_active_subscriber_by_user_id",
-    { p_user_id: trimmed }
-  );
-  if (error) {
-    console.warn(
-      "[subscriber] check_active_subscriber_by_user_id:",
-      error.message
-    );
-    return null;
-  }
-  return data === true;
+  const status = await queryBillingStatus({ userId: trimmed });
+  if (!status) return null;
+  return status.subscribed;
 }
 
 export type PremiumCheckInput = {
@@ -118,26 +124,15 @@ export type PremiumCheckInput = {
   headerEmail?: string | null;
 };
 
+export async function getBillingStatus(
+  input: PremiumCheckInput
+): Promise<BillingStatus> {
+  return (await queryBillingStatus(input)) ?? buildDefaultBillingStatus();
+}
+
 /** Premium if user id is linked to an active sub, or any provided email has one. */
 export async function isPremium(input: PremiumCheckInput): Promise<boolean> {
-  const userId = input.userId?.trim();
-  if (userId) {
-    const byUser = await checkActiveSubscriberByUserId(userId);
-    if (byUser === true) return true;
-  }
-
-  const emails = new Set<string>();
-  const authEmail = input.authEmail?.trim();
-  const headerEmail = input.headerEmail?.trim();
-  if (authEmail) emails.add(authEmail);
-  if (headerEmail) emails.add(headerEmail);
-
-  for (const email of emails) {
-    const active = await checkActiveSubscriber(email);
-    if (active === true) return true;
-  }
-
-  return false;
+  return (await getBillingStatus(input)).subscribed;
 }
 
 /** Resolve Premium from a request (JWT user id + auth email + optional header email). */
@@ -147,6 +142,18 @@ export async function isPremiumFromRequest(
   const user = await getAuthenticatedUser(req);
   const headerEmail = req.headers.get(SUBSCRIBER_EMAIL_HEADER)?.trim() ?? null;
   return isPremium({
+    userId: user?.id ?? null,
+    authEmail: user?.email ?? null,
+    headerEmail,
+  });
+}
+
+export async function getBillingStatusFromRequest(
+  req: NextRequest
+): Promise<BillingStatus> {
+  const user = await getAuthenticatedUser(req);
+  const headerEmail = req.headers.get(SUBSCRIBER_EMAIL_HEADER)?.trim() ?? null;
+  return getBillingStatus({
     userId: user?.id ?? null,
     authEmail: user?.email ?? null,
     headerEmail,

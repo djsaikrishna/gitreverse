@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAuthenticatedUser } from "@/lib/auth-request";
+import { STRIPE_PRICE_IDS, type BillingPlan } from "@/lib/billing-config";
 
 export const runtime = "nodejs";
+
+type CheckoutPlan = Extract<BillingPlan, "starter" | "pro" | "unlimited">;
 
 function getStripeClient(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
@@ -32,12 +35,44 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const priceId = process.env.STRIPE_PRICE_ID?.trim();
+  let body: unknown = null;
+  try {
+    body = await req.json();
+  } catch {
+    body = null;
+  }
+
+  const requestedPlan =
+    body &&
+    typeof body === "object" &&
+    "plan" in body &&
+    typeof (body as { plan?: unknown }).plan === "string"
+      ? ((body as { plan: string }).plan.trim().toLowerCase() as CheckoutPlan)
+      : "starter";
+
+  const priceId =
+    requestedPlan === "pro"
+      ? STRIPE_PRICE_IDS.pro
+      : requestedPlan === "unlimited"
+        ? STRIPE_PRICE_IDS.unlimited
+        : STRIPE_PRICE_IDS.starter;
+
+  if (
+    requestedPlan !== "starter" &&
+    requestedPlan !== "pro" &&
+    requestedPlan !== "unlimited"
+  ) {
+    return NextResponse.json(
+      { error: "invalid_plan", message: "Plan must be starter, pro, or unlimited" },
+      { status: 400 }
+    );
+  }
+
   if (!priceId) {
     return NextResponse.json(
       {
         error: "stripe_not_configured",
-        message: "STRIPE_PRICE_ID is not set",
+        message: "No Stripe price is configured for the selected plan",
       },
       { status: 503 }
     );
@@ -55,9 +90,15 @@ export async function POST(req: NextRequest) {
       allow_promotion_codes: true,
       client_reference_id: user.id,
       customer_email: user.email ?? undefined,
-      metadata: { supabase_user_id: user.id },
+      metadata: {
+        supabase_user_id: user.id,
+        requested_plan: requestedPlan,
+      },
       subscription_data: {
-        metadata: { supabase_user_id: user.id },
+        metadata: {
+          supabase_user_id: user.id,
+          requested_plan: requestedPlan,
+        },
       },
     });
 

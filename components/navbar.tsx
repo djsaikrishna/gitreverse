@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { getPlanLabel, type BillingPlan } from "@/lib/billing-config";
 import { useAuth } from "@/contexts/AuthContext";
 import { AUTH_SKIP, isSupabaseAuthConfigured } from "@/lib/supabase-auth";
-import { fetchSubscriptionStatus } from "@/lib/subscription-status-client";
+import { fetchBillingStatus } from "@/lib/subscription-status-client";
 import type { User } from "@supabase/supabase-js";
 
 function IconBooks({ className }: { className?: string }) {
@@ -179,10 +180,9 @@ function LibraryNavLink({ isActive }: { isActive: boolean }) {
         href="/library"
         aria-label="Library"
         aria-current={isActive ? "page" : undefined}
-        className={`relative inline-flex items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 sm:px-3 ${btnShift} ${isActive ? "ring-2 ring-zinc-400" : ""}`}
+        className={`relative inline-flex items-center justify-center rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] p-2 text-sm font-bold text-zinc-900 transition-transform duration-100 ${btnShift} ${isActive ? "ring-2 ring-zinc-400" : ""}`}
       >
         <IconBooks />
-        <span>Library</span>
       </Link>
     </span>
   );
@@ -205,17 +205,14 @@ function PremiumNavLink({ isSubscriber }: { isSubscriber: boolean }) {
         style={{ transform: shadowShift }}
         aria-hidden
       />
-      {isSubscriber ? (
-        <span aria-label="Premium" className={buttonClass}>
-          <IconPremiumBadge size={17} />
-          <span>Premium</span>
-        </span>
-      ) : (
-        <Link href="/premium" aria-label="Premium" className={buttonClass}>
-          <IconPremiumBadge size={17} />
-          <span>Premium</span>
-        </Link>
-      )}
+      <Link
+        href="/premium"
+        aria-label={isSubscriber ? "Premium subscription" : "Premium"}
+        className={buttonClass}
+      >
+        <IconPremiumBadge size={17} />
+        <span>Premium</span>
+      </Link>
     </span>
   );
 }
@@ -232,21 +229,21 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
   const authUiEnabled =
     Boolean(!AUTH_SKIP && isSupabaseAuthConfigured());
 
-  const [subscriptionFromApi, setSubscriptionFromApi] = useState(false);
+  const [planFromApi, setPlanFromApi] = useState<BillingPlan>("free");
   useEffect(() => {
     const token = session?.access_token;
     if (!token) {
-      setSubscriptionFromApi(false);
+      setPlanFromApi("free");
       return;
     }
 
     let cancelled = false;
     void (async () => {
       try {
-        const subscribed = await fetchSubscriptionStatus(token);
-        if (!cancelled) setSubscriptionFromApi(subscribed);
+        const status = await fetchBillingStatus(token);
+        if (!cancelled) setPlanFromApi(status.plan);
       } catch {
-        if (!cancelled) setSubscriptionFromApi(false);
+        if (!cancelled) setPlanFromApi("free");
       }
     })();
 
@@ -255,8 +252,9 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
     };
   }, [session?.access_token]);
 
-  const isSubscriber =
-    Boolean(isSubscriberProp) || subscriptionFromApi;
+  const isSubscriber = Boolean(isSubscriberProp) || planFromApi !== "free";
+  const planLabel =
+    isSubscriber && isSubscriberProp ? "Premium" : getPlanLabel(planFromApi);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -318,7 +316,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
         return;
       }
 
-      setSubscriptionFromApi(false);
+      setPlanFromApi("free");
       setCancelSuccess(true);
       setCancelLoading(false);
       window.setTimeout(() => {
@@ -384,12 +382,8 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
           <LibraryNavLink isActive={pathname === "/library"} />
 
-          {!isSubscriber ? (
-            <>
-              <NavDivider />
-              <PremiumNavLink isSubscriber={isSubscriber} />
-            </>
-          ) : null}
+          <NavDivider />
+          <PremiumNavLink isSubscriber={isSubscriber} />
 
           <NavDivider />
 
@@ -438,7 +432,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
                         {isSubscriber ? (
                           <span className="mt-2 inline-flex items-center gap-1 rounded border-[1.5px] border-zinc-900 bg-[#fff4da] px-2 py-0.5 text-[11px] font-bold text-zinc-900">
                             <IconPremiumBadge size={12} />
-                            Premium
+                            {planLabel}
                           </span>
                         ) : null}
                       </div>

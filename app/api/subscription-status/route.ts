@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/auth-request";
-import { isPremium } from "@/lib/subscriber";
+import { getBillingStatus } from "@/lib/subscriber";
 import { SUBSCRIBER_EMAIL_HEADER } from "@/lib/subscriber-constants";
 
 export const runtime = "nodejs";
@@ -15,11 +15,11 @@ export async function GET(req: NextRequest) {
   }
 
   const headerEmail = req.headers.get(SUBSCRIBER_EMAIL_HEADER)?.trim() ?? null;
-  const subscribed = await isPremium({
+  const status = await getBillingStatus({
     userId: user.id,
     authEmail: user.email,
     headerEmail,
   });
 
-  return NextResponse.json({ subscribed });
+  return NextResponse.json(status);
 }
