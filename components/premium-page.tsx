@@ -157,6 +157,7 @@ export function PremiumPage() {
 
   const currentPlan = billingStatus.plan;
   const isSubscriber = billingStatus.subscribed;
+  const isLegacyPlan = billingStatus.isLegacy;
   const canUpgradePlan = useCallback(
     (plan: CheckoutPlan) => isSubscriber && canUpgradeToPlan(currentPlan, plan),
     [currentPlan, isSubscriber]
@@ -186,7 +187,7 @@ export function PremiumPage() {
       void promise
         .catch((err) => {
           const fallback =
-            currentPlan === "legacy_unlimited"
+            isLegacyPlan
               ? "Your legacy unlimited plan stays active until renewal."
               : "Plan change unavailable.";
           setError(err instanceof Error ? err.message : fallback);
@@ -200,6 +201,7 @@ export function PremiumPage() {
       currentPlan,
       isAuthenticated,
       isSubscriber,
+    isLegacyPlan,
       refreshStatus,
       session?.access_token,
     ]
