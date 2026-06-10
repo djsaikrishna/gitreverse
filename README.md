@@ -26,10 +26,23 @@ The quick reverse endpoint supports four providers. Set **`GITREVERSE_QUICK_LLM`
 |---|---|---|---|
 | Grok (xAI) | `XAI_API_KEY` | `XAI_MODEL` | `grok-3` |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `google/gemini-2.5-pro` |
-| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-4.1` |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` | `AZURE_OPENAI_MODEL` | `gpt-5.4` |
 | Google AI Studio | `GOOGLE_GENERATIVE_AI_API_KEY` | `GOOGLE_AI_STUDIO_MODEL` | `gemini-2.5-pro` |
 
-In `auto` mode the order of preference is: Grok → OpenRouter → OpenAI → Google.
+In `auto` mode the order of preference is: Grok → OpenRouter → Azure → Google.
+
+Azure quick reverse uses `gpt-5.4` by default with `AZURE_OPENAI_REASONING_EFFORT=medium`. Title generation also uses Azure and defaults to `gpt-5.4-mini` with reasoning disabled.
+
+### Embeddings / library search
+
+Prompt-cache embeddings and `/library` hybrid search now use Azure embeddings first:
+
+- **`AZURE_OPENAI_EMBEDDING_MODEL`** — defaults to `text-embedding-3-small`
+- **`AZURE_OPENAI_EMBEDDING_DIMENSIONS`** — defaults to `512`
+- **`AZURE_OPENAI_EMBEDDING_DEPLOYMENT`** — optional explicit deployment name
+- **`AZURE_OPENAI_DEPLOYMENT_NAME_MAP`** — optional `model=deployment` mapping when deployment names differ from model ids
+
+If your Azure resource does not yet have an embedding deployment, you can temporarily set **`OPENAI_API_KEY`** as an embedding-only fallback while quick reverse and title generation stay on Azure.
 
 ### Other env vars
 
