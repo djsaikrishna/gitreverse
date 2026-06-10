@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { embedText, getOpenAiApiKey } from "@/lib/embeddings";
+import { embedText, hasEmbeddingProvider } from "@/lib/embeddings";
 import { getSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -243,7 +243,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (search) {
-      if (getOpenAiApiKey()) {
+      if (hasEmbeddingProvider()) {
         try {
           const hybrid = await runHybridSearch(search, page, limit);
           if (hybrid.total > 0 || hybrid.data.length > 0) {

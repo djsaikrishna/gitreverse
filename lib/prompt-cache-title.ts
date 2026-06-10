@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  generateAzureChatText,
+  getAzureTitleModel,
+  getAzureTitleReasoningEffort,
+} from "@/lib/azure-openai";
 
-export const TITLE_MODEL = "gpt-4o-mini";
-const OPENAI_BASE = "https://api.openai.com/v1";
+export const TITLE_MODEL = "gpt-5.4-mini";
 const PROMPT_LIMIT = 600;
 
 export const TITLE_SYSTEM_PROMPT =
@@ -23,11 +27,6 @@ type PromptRow = {
   prompt: string;
 };
 
-export function getOpenAiApiKey(): string | null {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  return key || null;
-}
-
 export function sanitizeTitle(raw: string): string {
   let title = raw.trim();
   title = title.replace(/^["'`]+|["'`]+$/g, "").trim();
@@ -36,47 +35,15 @@ export function sanitizeTitle(raw: string): string {
 }
 
 export async function generateTitle(prompt: string): Promise<string | null> {
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: TITLE_MODEL,
-      temperature: 0.3,
-      max_tokens: 40,
-      messages: [
-        { role: "system", content: TITLE_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: prompt.slice(0, PROMPT_LIMIT),
-        },
-      ],
-    }),
+  const raw = await generateAzureChatText({
+    model: getAzureTitleModel(),
+    systemPrompt: TITLE_SYSTEM_PROMPT,
+    userMessage: prompt.slice(0, PROMPT_LIMIT),
+    reasoningEffort: getAzureTitleReasoningEffort(),
+    temperature: 0.3,
+    maxCompletionTokens: 64,
+    deploymentEnvName: "AZURE_OPENAI_TITLE_DEPLOYMENT",
   });
-
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(
-      "[prompt-cache-title] OpenRouter failed:",
-      res.status,
-      body.slice(0, 200)
-    );
-    return null;
-  }
-
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const raw = json.choices?.[0]?.message?.content?.trim();
-  if (!raw) return null;
-
   const title = sanitizeTitle(raw);
   return title.length > 0 ? title : null;
 }
