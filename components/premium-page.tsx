@@ -178,9 +178,13 @@ export function PremiumPage() {
       if (isSubscriber && !canUpgradeToPlan(currentPlan, plan)) return;
 
       setBusyPlan(plan);
+      const isUpgradeForExistingSubscriber =
+        isSubscriber &&
+        canUpgradeToPlan(currentPlan, plan) &&
+        Boolean(session?.access_token);
 
       const promise =
-        canUpgradeToPlan(currentPlan, plan) && session?.access_token
+        isUpgradeForExistingSubscriber
           ? changeStripePlan(plan, session.access_token).then(refreshStatus)
           : beginStripeCheckout(plan, session?.access_token);
 
@@ -201,7 +205,7 @@ export function PremiumPage() {
       currentPlan,
       isAuthenticated,
       isSubscriber,
-    isLegacyPlan,
+      isLegacyPlan,
       refreshStatus,
       session?.access_token,
     ]
