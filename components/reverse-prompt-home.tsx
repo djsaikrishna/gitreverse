@@ -137,8 +137,12 @@ export function ReversePromptHome({
   const router = useRouter();
   const { isAuthenticated, session } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [premiumUpsellFeature, setPremiumUpsellFeature] = useState<
+    "deep" | "manual" | null
+  >(null);
 
   const openAuthModalWithPending = useCallback((action: PendingAuthAction) => {
+    setPremiumUpsellFeature(null);
     savePendingAuth(action);
     setShowAuthModal(true);
   }, []);
@@ -147,6 +151,21 @@ export function ReversePromptHome({
     clearPendingAuth();
     setShowAuthModal(false);
   }, []);
+
+  const openPremiumUpsell = useCallback((feature: "deep" | "manual") => {
+    clearPendingAuth();
+    setShowAuthModal(false);
+    setPremiumUpsellFeature(feature);
+  }, []);
+
+  const closePremiumUpsell = useCallback(() => {
+    setPremiumUpsellFeature(null);
+  }, []);
+
+  const goToPremium = useCallback(() => {
+    saveReturnPath();
+    void router.push("/premium");
+  }, [router]);
 
   const initialFocus =
     autoSubmitDeep
@@ -394,6 +413,7 @@ export function ReversePromptHome({
       setRateLimited(false);
       setMonthlyLimitReached(false);
       setLimitErrorType(null);
+      setPremiumUpsellFeature(null);
       setPrompt("");
       setCopied(false);
       const isDeep =
@@ -443,8 +463,19 @@ export function ReversePromptHome({
                 );
                 void refreshBillingStatus();
               } else if (data.error === "premium_required") {
-                saveReturnPath();
-                void router.push("/premium");
+                if (!isAuthenticated) {
+                  openAuthModalWithPending(
+                    isDeep
+                      ? { type: "deep", repoUrl: input }
+                      : {
+                          type: "manual",
+                          repoUrl: input,
+                          focus: String(focusOrDeep as string).trim(),
+                        }
+                  );
+                } else {
+                  openPremiumUpsell(isDeep ? "deep" : "manual");
+                }
               } else {
                 setRateLimited(true);
               }
@@ -510,8 +541,19 @@ export function ReversePromptHome({
                 );
                 void refreshBillingStatus();
               } else if (errData.error === "premium_required") {
-                saveReturnPath();
-                void router.push("/premium");
+                if (!isAuthenticated) {
+                  openAuthModalWithPending(
+                    isDeep
+                      ? { type: "deep", repoUrl: input }
+                      : {
+                          type: "manual",
+                          repoUrl: input,
+                          focus: String(focusOrDeep as string).trim(),
+                        }
+                  );
+                } else {
+                  openPremiumUpsell(isDeep ? "deep" : "manual");
+                }
               } else {
                 setRateLimited(true);
               }
@@ -614,7 +656,14 @@ export function ReversePromptHome({
         setManualStatusLine("");
       }
     },
-    [preserveUrl, refreshBillingStatus, router, session?.access_token]
+    [
+      isAuthenticated,
+      openAuthModalWithPending,
+      openPremiumUpsell,
+      preserveUrl,
+      refreshBillingStatus,
+      session?.access_token,
+    ]
   );
 
   const startDeepReverse = useCallback(() => {
@@ -622,9 +671,13 @@ export function ReversePromptHome({
     const input = repoUrl.trim();
     const parsed = parseGitHubRepoInput(input);
     if (!parsed) return;
+    setPremiumUpsellFeature(null);
+    if (!isAuthenticated) {
+      openAuthModalWithPending({ type: "deep", repoUrl: input });
+      return;
+    }
     if (!isSubscriber) {
-      saveReturnPath();
-      void router.push("/premium");
+      openPremiumUpsell("deep");
       return;
     }
     if (!initialRepoInput?.trim()) {
@@ -635,6 +688,9 @@ export function ReversePromptHome({
       void runCustomReverse(input, { mode: "deep" });
     }
   }, [
+    isAuthenticated,
+    openAuthModalWithPending,
+    openPremiumUpsell,
     loading,
     repoUrl,
     isSubscriber,
@@ -663,15 +719,24 @@ export function ReversePromptHome({
     }
     if (action.type === "deep") {
       if (!isSubscriber) {
-        saveReturnPath();
-        void router.push("/premium");
+        openPremiumUpsell("deep");
         return;
       }
       void runCustomReverse(action.repoUrl, { mode: "deep" });
     } else if (action.type === "manual") {
+      if (!isSubscriber) {
+        openPremiumUpsell("manual");
+        return;
+      }
       void runCustomReverse(action.repoUrl, action.focus);
     }
-  }, [isAuthenticated, subscriberHydrated, isSubscriber, router, runCustomReverse]);
+  }, [
+    isAuthenticated,
+    openPremiumUpsell,
+    subscriberHydrated,
+    isSubscriber,
+    runCustomReverse,
+  ]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -689,6 +754,10 @@ export function ReversePromptHome({
             repoUrl: trimmed,
             focus,
           });
+          return;
+        }
+        if (!isSubscriber) {
+          openPremiumUpsell("manual");
           return;
         }
         void router.push(
@@ -712,6 +781,10 @@ export function ReversePromptHome({
           repoUrl: trimmed,
           focus,
         });
+        return;
+      }
+      if (!isSubscriber) {
+        openPremiumUpsell("manual");
         return;
       }
       const parsed = parseGitHubRepoInput(trimmed);
@@ -741,9 +814,12 @@ export function ReversePromptHome({
     if (!trimmed || !parseGitHubRepoInput(trimmed)) return;
 
     if (autoSubmitDeep) {
+      if (!isAuthenticated) {
+        openAuthModalWithPending({ type: "deep", repoUrl: trimmed });
+        return;
+      }
       if (!isSubscriber) {
-        saveReturnPath();
-        void router.replace("/premium");
+        openPremiumUpsell("deep");
         return;
       }
       autoSubmitStartedRef.current = true;
@@ -753,7 +829,11 @@ export function ReversePromptHome({
     const focus = autoSubmitFocus?.trim() ?? "";
     if (focus) {
       if (!isAuthenticated) {
-        setShowAuthModal(true);
+        openAuthModalWithPending({ type: "manual", repoUrl: trimmed, focus });
+        return;
+      }
+      if (!isSubscriber) {
+        openPremiumUpsell("manual");
         return;
       }
       autoSubmitStartedRef.current = true;
@@ -770,20 +850,35 @@ export function ReversePromptHome({
     autoSubmitDeep,
     autoSubmitFocus,
     initialRepoInput,
+    isAuthenticated,
+    openAuthModalWithPending,
+    openPremiumUpsell,
     runCustomReverse,
     runReversePrompt,
-    isAuthenticated,
     isSubscriber,
-    router,
   ]);
 
   useEffect(() => {
     if (!subscriberHydrated) return;
     if (!preserveUrl || initialGenerationKind !== "deep") return;
+    const trimmed = initialRepoInput?.trim() ?? "";
+    if (!trimmed) return;
+    if (!isAuthenticated) {
+      openAuthModalWithPending({ type: "deep", repoUrl: trimmed });
+      return;
+    }
     if (isSubscriber) return;
-    saveReturnPath();
-    void router.replace("/premium");
-  }, [subscriberHydrated, isSubscriber, preserveUrl, initialGenerationKind, router]);
+    openPremiumUpsell("deep");
+  }, [
+    initialGenerationKind,
+    initialRepoInput,
+    isAuthenticated,
+    openAuthModalWithPending,
+    openPremiumUpsell,
+    preserveUrl,
+    subscriberHydrated,
+    isSubscriber,
+  ]);
 
   /* `/owner/repo` uses quick auto-submit; `/owner/repo/deep` and `/owner/repo/<focus>` use the branches above. */
 
@@ -1199,6 +1294,35 @@ export function ReversePromptHome({
                 <p className="mt-3 text-sm text-red-600" role="alert">
                   {error}
                 </p>
+              ) : premiumUpsellFeature ? (
+                <div
+                  className="mt-4 rounded-lg border-[3px] border-zinc-900 bg-[#fff4da] p-4"
+                  role="alert"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <p className="text-sm font-semibold text-zinc-900">
+                      {premiumUpsellFeature === "deep"
+                        ? "Deep Reverse is only available on Premium."
+                        : "Manual control is only available on Premium."}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={goToPremium}
+                        className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
+                      >
+                        Upgrade
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closePremiumUpsell}
+                        className="inline-flex items-center justify-center rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
+                      >
+                        Maybe later
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ) : null}
               {isHome && !loading && !customReverse ? (
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -1237,7 +1361,7 @@ export function ReversePromptHome({
           </div>
         </div>
 
-        {prompt ? (
+        {prompt && !premiumUpsellFeature ? (
           <div
             ref={resultsRef}
             data-results

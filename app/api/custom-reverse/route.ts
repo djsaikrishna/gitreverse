@@ -428,9 +428,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (isDeep && process.env.NODE_ENV !== "development") {
+  if (process.env.NODE_ENV !== "development") {
     const status = await getBillingStatusFromRequest(request);
-    if (!status.deepReverse.canUse) {
+    const canUse = isDeep ? status.deepReverse.canUse : status.manualControl.canUse;
+    if (!canUse) {
       return NextResponse.json({ error: "premium_required" }, { status: 403 });
     }
   }
