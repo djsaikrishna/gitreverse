@@ -38,7 +38,7 @@ export const STRIPE_PRICE_IDS = {
   unlimited: "price_1TfvMRIBG5KwEK8a5aETT5X8",
 } as const;
 
-export const FREE_MANUAL_LIMIT = 1;
+export const FREE_MANUAL_LIMIT = 0;
 export const STARTER_LIMIT = 3;
 export const PRO_LIMIT = 10;
 
@@ -92,19 +92,13 @@ export function getPlanLabel(plan: BillingPlan): string {
   }
 }
 
-function featureForPlan(
-  plan: BillingPlan,
-  action: BillingAction
-): BillingFeatureStatus {
+function featureForPlan(plan: BillingPlan): BillingFeatureStatus {
   if (plan === "free") {
-    if (action === "deep_reverse") {
-      return { limit: 0, remaining: 0, window: "month", canUse: false };
-    }
     return {
-      limit: FREE_MANUAL_LIMIT,
-      remaining: FREE_MANUAL_LIMIT,
+      limit: 0,
+      remaining: 0,
       window: "month",
-      canUse: true,
+      canUse: false,
     };
   }
 
@@ -145,8 +139,8 @@ export function buildDefaultBillingStatus(plan: BillingPlan = "free"): BillingSt
               : null,
     isLegacy: plan === "legacy_unlimited",
     nextPlan: getNextPlan(plan),
-    deepReverse: featureForPlan(plan, "deep_reverse"),
-    manualControl: featureForPlan(plan, "manual_control"),
+    deepReverse: featureForPlan(plan),
+    manualControl: featureForPlan(plan),
   };
 }
 
