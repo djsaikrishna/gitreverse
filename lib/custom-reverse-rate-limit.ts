@@ -44,7 +44,13 @@ export async function enforceCustomReverseRateLimit(
   const authEmail = token ? extractEmailFromJwtPayload(token) : null;
   const headerEmail = req.headers.get(SUBSCRIBER_EMAIL_HEADER)?.trim() ?? null;
   if (!userId) {
-    return null;
+    return NextResponse.json(
+      {
+        error: "premium_required",
+        remaining: 0,
+      },
+      { status: 403 }
+    );
   }
 
   try {
