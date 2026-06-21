@@ -222,7 +222,7 @@ export function ReversePromptHome({
         : `You’ve hit your ${getPlanLabel(billingStatus.plan)} limit.`;
   const limitCtaLabel =
     billingStatus.plan === "free"
-      ? "See Starter"
+      ? "See Premium"
       : nextPlanLabel
         ? `Upgrade to ${nextPlanLabel}`
         : null;
@@ -1119,9 +1119,9 @@ export function ReversePromptHome({
             <div className="relative flex w-full flex-col items-center text-center">
 
               <h1 className="text-5xl font-extrabold tracking-tighter sm:text-6xl lg:text-7xl">
-                Repository to
+                Steal any code
                 <br />
-                Prompt
+                and make it your own
               </h1>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
                 Reverse engineer a codebase into a prompt you can build from.

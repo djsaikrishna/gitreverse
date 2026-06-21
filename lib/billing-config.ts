@@ -39,8 +39,8 @@ export const STRIPE_PRICE_IDS = {
 } as const;
 
 export const FREE_MANUAL_LIMIT = 0;
-export const STARTER_LIMIT = 3;
-export const PRO_LIMIT = 10;
+export const STARTER_LIMIT = 5;
+export const PRO_LIMIT = 5;
 
 export const PLAN_RANK: Record<BillingPlan, number> = {
   free: 0,
@@ -57,36 +57,26 @@ export function isPaidPlan(plan: BillingPlan): plan is PaidBillingPlan {
 export function getNextPlan(
   plan: BillingPlan
 ): "starter" | "pro" | "unlimited" | null {
-  switch (plan) {
-    case "free":
-      return "starter";
-    case "starter":
-      return "pro";
-    case "pro":
-      return "unlimited";
-    default:
-      return null;
-  }
+  return plan === "free" ? "starter" : null;
 }
 
 export function canUpgradeToPlan(
   currentPlan: BillingPlan,
   targetPlan: Extract<BillingPlan, "starter" | "pro" | "unlimited">
 ): boolean {
-  if (currentPlan === "legacy_unlimited") return false;
-  return PLAN_RANK[targetPlan] > PLAN_RANK[currentPlan];
+  return currentPlan === "free" && targetPlan === "starter";
 }
 
 export function getPlanLabel(plan: BillingPlan): string {
   switch (plan) {
     case "starter":
-      return "Starter";
+      return "Premium";
     case "pro":
-      return "Pro";
+      return "Premium";
     case "unlimited":
-      return "Unlimited";
+      return "Premium";
     case "legacy_unlimited":
-      return "Legacy Unlimited";
+      return "Premium";
     default:
       return "Free";
   }
@@ -111,16 +101,25 @@ function featureForPlan(plan: BillingPlan): BillingFeatureStatus {
     };
   }
 
-  if (plan === "pro") {
+  if (
+    plan === "pro" ||
+    plan === "unlimited" ||
+    plan === "legacy_unlimited"
+  ) {
     return {
-      limit: PRO_LIMIT,
-      remaining: PRO_LIMIT,
+      limit: STARTER_LIMIT,
+      remaining: STARTER_LIMIT,
       window: "month",
       canUse: true,
     };
   }
 
-  return { limit: null, remaining: null, window: null, canUse: true };
+  return {
+    limit: STARTER_LIMIT,
+    remaining: STARTER_LIMIT,
+    window: "month",
+    canUse: true,
+  };
 }
 
 export function buildDefaultBillingStatus(plan: BillingPlan = "free"): BillingStatus {

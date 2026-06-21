@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAuthenticatedUser } from "@/lib/auth-request";
-import { STRIPE_PRICE_IDS, type BillingPlan } from "@/lib/billing-config";
+import { STRIPE_PRICE_IDS } from "@/lib/billing-config";
 
 export const runtime = "nodejs";
-
-type CheckoutPlan = Extract<BillingPlan, "starter" | "pro" | "unlimited">;
 
 function getStripeClient(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
@@ -35,38 +33,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: unknown = null;
-  try {
-    body = await req.json();
-  } catch {
-    body = null;
-  }
-
-  const requestedPlan =
-    body &&
-    typeof body === "object" &&
-    "plan" in body &&
-    typeof (body as { plan?: unknown }).plan === "string"
-      ? ((body as { plan: string }).plan.trim().toLowerCase() as CheckoutPlan)
-      : "starter";
-
-  const priceId =
-    requestedPlan === "pro"
-      ? STRIPE_PRICE_IDS.pro
-      : requestedPlan === "unlimited"
-        ? STRIPE_PRICE_IDS.unlimited
-        : STRIPE_PRICE_IDS.starter;
-
-  if (
-    requestedPlan !== "starter" &&
-    requestedPlan !== "pro" &&
-    requestedPlan !== "unlimited"
-  ) {
-    return NextResponse.json(
-      { error: "invalid_plan", message: "Plan must be starter, pro, or unlimited" },
-      { status: 400 }
-    );
-  }
+  const priceId = STRIPE_PRICE_IDS.starter;
+  const requestedPlan = "starter";
 
   if (!priceId) {
     return NextResponse.json(
