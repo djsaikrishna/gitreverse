@@ -1119,9 +1119,9 @@ export function ReversePromptHome({
             <div className="relative flex w-full flex-col items-center text-center">
 
               <h1 className="text-5xl font-extrabold tracking-tighter sm:text-6xl lg:text-7xl">
-                Steal any code
+                Repository to
                 <br />
-                and make it your own
+                prompt
               </h1>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
                 Reverse engineer a codebase into a prompt you can build from.

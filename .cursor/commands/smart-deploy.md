@@ -8,6 +8,10 @@ If the branch is successfully deployed, merge it using gh cli.
 
 If the branch isn't successfully deployed, find out the errors using vercel CLI, fix them, push again and see if deployment worked correctly. 
 
+if there are new environment variables, also you can set them using the vercel cli to the deployed environment.
+
 If successful, merge. if not, redo the cycle.
+
+Don't commit on the existing branch and then push. make sure you create a new branch then add and commit.
 
 thanks.

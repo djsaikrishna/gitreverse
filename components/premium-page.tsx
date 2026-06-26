@@ -139,7 +139,7 @@ export function PremiumPage() {
 
       <div className="mx-auto flex max-w-4xl flex-col items-center px-6 pb-3 pt-12 text-center sm:px-8 sm:pt-16 md:pb-4">
         <h1 className="m-0 max-w-[100%] text-center text-[clamp(0.9375rem,calc(0.65rem+3.85vw),3.75rem)] font-extrabold leading-none tracking-tight text-zinc-900 whitespace-nowrap">
-          Steal more, build better
+          Reverse more, build better
         </h1>
       </div>
 
