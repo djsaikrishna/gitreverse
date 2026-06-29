@@ -36,6 +36,9 @@ export const metadata: Metadata = {
     description:
       "Reverse engineer any GitHub repository into a plain-language coding agent prompt you can build from.",
   },
+  other: {
+    "impact-site-verification": "daff38b7-bd21-4b50-bbbc-bdf3b0e4c564",
+  },
 };
 
 const checkoutNavigationRestoreScript = `
@@ -107,12 +110,6 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full bg-[#fffdf8] antialiased`}
     >
-      <head>
-        <meta
-          name="impact-site-verification"
-          value="daff38b7-bd21-4b50-bbbc-bdf3b0e4c564"
-        />
-      </head>
       <body className="min-h-full flex flex-col">
         <script
           dangerouslySetInnerHTML={{ __html: checkoutNavigationRestoreScript }}
