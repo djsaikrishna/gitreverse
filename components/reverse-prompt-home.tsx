@@ -1494,15 +1494,6 @@ export function ReversePromptHome({
             </svg>
             Discord
           </a>
-          <span className="text-zinc-300" aria-hidden>
-            ·
-          </span>
-          <Link
-            href="/sponsor"
-            className="font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-900"
-          >
-            Sponsor
-          </Link>
         </div>
       </footer>
 

@@ -164,6 +164,7 @@ function LibraryNavLink({ isActive }: { isActive: boolean }) {
   const [hov, setHov] = useState(false);
   const shadowShift = hov ? "translate(2px,2px)" : "translate(3px,3px)";
   const btnShift = hov ? "-translate-x-px -translate-y-px" : "";
+  const buttonClass = `relative inline-flex items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 sm:px-3.5 ${btnShift} ${isActive ? "ring-2 ring-zinc-400" : ""}`;
 
   return (
     <span
@@ -178,40 +179,11 @@ function LibraryNavLink({ isActive }: { isActive: boolean }) {
       />
       <Link
         href="/library"
-        aria-label="Library"
         aria-current={isActive ? "page" : undefined}
-        className={`relative inline-flex items-center justify-center rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] p-2 text-sm font-bold text-zinc-900 transition-transform duration-100 ${btnShift} ${isActive ? "ring-2 ring-zinc-400" : ""}`}
-      >
-        <IconBooks />
-      </Link>
-    </span>
-  );
-}
-
-function PremiumNavLink({ isSubscriber }: { isSubscriber: boolean }) {
-  const [hov, setHov] = useState(false);
-  const shadowShift = hov ? "translate(2px,2px)" : "translate(3px,3px)";
-  const btnShift = hov ? "-translate-x-px -translate-y-px" : "";
-  const buttonClass = `relative inline-flex items-center gap-1.5 rounded-md border-[2.5px] border-zinc-900 bg-[#fff4da] px-2 py-1.5 text-sm font-bold text-zinc-900 transition-transform duration-100 sm:px-3.5 ${btnShift}`;
-
-  return (
-    <span
-      className="relative isolate inline-flex"
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-    >
-      <span
-        className="pointer-events-none absolute inset-0 rounded-md bg-zinc-900 transition-transform duration-100"
-        style={{ transform: shadowShift }}
-        aria-hidden
-      />
-      <Link
-        href="/premium"
-        aria-label={isSubscriber ? "Premium subscription" : "Premium"}
         className={buttonClass}
       >
-        <IconPremiumBadge size={17} />
-        <span>Premium</span>
+        <IconBooks />
+        <span>Library</span>
       </Link>
     </span>
   );
@@ -381,9 +353,6 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
 
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
           <LibraryNavLink isActive={pathname === "/library"} />
-
-          <NavDivider />
-          <PremiumNavLink isSubscriber={isSubscriber} />
 
           <NavDivider />
 
