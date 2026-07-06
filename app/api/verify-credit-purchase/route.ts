@@ -1,48 +1,68 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import { getAuthenticatedUser } from "@/lib/auth-request";
 import { getBillingStatus } from "@/lib/subscriber";
 import { getSupabase } from "@/lib/supabase";
+import { STRIPE_PRICE_IDS } from "@/lib/billing-config";
 
 export const runtime = "nodejs";
 
-const VERIFY_RETRY_MS = 1500;
-const VERIFY_MAX_ATTEMPTS = 3;
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, ms));
+function getStripeClient(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!key) return null;
+  return new Stripe(key, { apiVersion: "2025-02-24.acacia" });
 }
 
-async function reconcileCreditsForUser(userId: string): Promise<number | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
-
-  const { data, error } = await supabase.rpc("reconcile_user_credits", {
-    p_user_id: userId,
-  });
-  if (error) {
-    console.warn("[verify-credit-purchase] reconcile_user_credits:", error.message);
-    return null;
-  }
-  return typeof data === "number" ? data : null;
-}
-
-async function creditSessionIsReconciled(
+/** Ask Stripe directly for the session, confirm it's paid and is our credit
+ *  product, then write the credits into our ledger. Idempotent via the
+ *  unique stripe_checkout_session_id constraint. */
+async function grantCreditsFromStripe(
   userId: string,
   sessionId: string
-): Promise<boolean> {
+): Promise<{ granted: boolean; credits: number }> {
+  const stripe = getStripeClient();
   const supabase = getSupabase();
-  if (!supabase) return false;
+  if (!stripe || !supabase) return { granted: false, credits: 0 };
 
-  const { data, error } = await supabase.rpc("credit_session_is_reconciled", {
-    p_user_id: userId,
-    p_session_id: sessionId,
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["line_items"],
+    });
+  } catch (err) {
+    console.warn("[verify-credit-purchase] stripe.retrieve:", err instanceof Error ? err.message : err);
+    return { granted: false, credits: 0 };
+  }
+
+  // Safety checks — must be paid, must be for this user
+  if (session.payment_status !== "paid") return { granted: false, credits: 0 };
+  if (session.metadata?.supabase_user_id !== userId) return { granted: false, credits: 0 };
+
+  // Must contain our credit price ID
+  const lineItems = session.line_items?.data ?? [];
+  const creditLine = lineItems.find(
+    (li) => li.price?.id === STRIPE_PRICE_IDS.credit
+  );
+  if (!creditLine) return { granted: false, credits: 0 };
+
+  const quantity = creditLine.quantity ?? 1;
+
+  // Write to ledger — ON CONFLICT DO NOTHING makes this safe to call again
+  const { error } = await supabase.from("user_credit_ledger").insert({
+    user_id: userId,
+    delta: quantity,
+    reason: "purchase",
+    stripe_checkout_session_id: sessionId,
   });
 
   if (error) {
-    console.warn("[verify-credit-purchase] credit_session_is_reconciled:", error.message);
-    return false;
+    // unique violation = already granted (idempotent)
+    if (error.code === "23505") return { granted: true, credits: quantity };
+    console.warn("[verify-credit-purchase] ledger insert:", error.message);
+    return { granted: false, credits: 0 };
   }
-  return data === true;
+
+  return { granted: true, credits: quantity };
 }
 
 export async function GET(req: NextRequest) {
@@ -56,24 +76,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  for (let attempt = 0; attempt < VERIFY_MAX_ATTEMPTS; attempt++) {
-    await reconcileCreditsForUser(user.id);
-    const reconciled = await creditSessionIsReconciled(user.id, sessionId);
-    if (reconciled) {
-      const status = await getBillingStatus({
-        userId: user.id,
-        authEmail: user.email,
-      });
-      return NextResponse.json({
-        sessionId,
-        reconciled: true,
-        ...status,
-      });
-    }
-    if (attempt < VERIFY_MAX_ATTEMPTS - 1) {
-      await sleep(VERIFY_RETRY_MS);
-    }
+  const { granted } = await grantCreditsFromStripe(user.id, sessionId);
+  if (!granted) {
+    return NextResponse.json({ error: "still_processing" }, { status: 404 });
   }
 
-  return NextResponse.json({ error: "still_processing" }, { status: 404 });
+  const status = await getBillingStatus({
+    userId: user.id,
+    authEmail: user.email,
+  });
+
+  return NextResponse.json({
+    sessionId,
+    reconciled: true,
+    ...status,
+  });
 }

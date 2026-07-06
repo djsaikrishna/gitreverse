@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
       customer_email: user.email ?? undefined,
       metadata: {
         supabase_user_id: user.id,
+        purchase_type: "credits",
       },
     });
 
