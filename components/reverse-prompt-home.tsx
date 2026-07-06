@@ -29,8 +29,6 @@ import {
 } from "@/lib/user-history";
 
 const PENDING_REDIRECT_KEY = "gr_pending_redirect";
-const CHECKOUT_NAVIGATION_STATE_KEY = "gr_checkout_navigation_state";
-const CHECKOUT_RETURNED_STATE = "returned";
 
 const PENDING_AUTH_KEY = "gr_pending_auth_action";
 
@@ -51,25 +49,6 @@ function clearPendingAuth(): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.removeItem(PENDING_AUTH_KEY);
-  } catch {
-    /* storage unavailable */
-  }
-}
-
-const CHECKOUT_ABANDONMENT_OPTIONS = [
-  { value: "too_expensive", label: "Too expensive" },
-  { value: "not_ready_yet", label: "Not ready yet" },
-  { value: "just_browsing", label: "Just browsing" },
-  { value: "other", label: "Other" },
-] as const;
-
-type CheckoutAbandonmentReason =
-  (typeof CHECKOUT_ABANDONMENT_OPTIONS)[number]["value"];
-
-function clearCheckoutNavigationState(): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.removeItem(CHECKOUT_NAVIGATION_STATE_KEY);
   } catch {
     /* storage unavailable */
   }
@@ -193,9 +172,6 @@ export function ReversePromptHome({
   const [creditCheckoutVerifyState, setCreditCheckoutVerifyState] = useState<
     "idle" | "verifying" | "still_processing"
   >("idle");
-  const [showAbandonmentSurvey, setShowAbandonmentSurvey] = useState(false);
-  const [abandonmentOtherText, setAbandonmentOtherText] = useState("");
-  const [abandonmentShowOther, setAbandonmentShowOther] = useState(false);
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [copied, setCopied] = useState(false);
   /** Live line for manual/deep (SSE or cache); empty when idle. */
@@ -271,22 +247,6 @@ export function ReversePromptHome({
     }
   }, [autoSubmitDeep, autoSubmitFocus, initialManualFocus, initialRepoInput]);
 
-  /** After interrupted checkout reload, layout script sets sessionStorage to `returned`. */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (
-        sessionStorage.getItem(CHECKOUT_NAVIGATION_STATE_KEY) ===
-        CHECKOUT_RETURNED_STATE
-      ) {
-        sessionStorage.removeItem(CHECKOUT_NAVIGATION_STATE_KEY);
-        setShowAbandonmentSurvey(true);
-      }
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-
   /** Stripe checkout return + Premium status from logged-in user. */
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -319,7 +279,6 @@ export function ReversePromptHome({
           };
           if (cancelled) return;
           if (res.ok && data.reconciled === true) {
-            clearCheckoutNavigationState();
             setBillingStatus(data);
             setMonthlyLimitReached(false);
             setLimitErrorType(null);
@@ -357,7 +316,6 @@ export function ReversePromptHome({
           };
           if (cancelled) return;
           if (res.ok && data.subscribed === true) {
-            clearCheckoutNavigationState();
             setBillingStatus(data);
             setMonthlyLimitReached(false);
             setLimitErrorType(null);
@@ -1064,29 +1022,6 @@ export function ReversePromptHome({
     }
   }
 
-  function dismissAbandonmentSurvey() {
-    setShowAbandonmentSurvey(false);
-    setAbandonmentShowOther(false);
-    setAbandonmentOtherText("");
-  }
-
-  function submitCheckoutAbandonmentReason(
-    reason: CheckoutAbandonmentReason,
-    otherText?: string
-  ) {
-    setShowAbandonmentSurvey(false);
-    setAbandonmentShowOther(false);
-    setAbandonmentOtherText("");
-    void fetch("/api/checkout-abandonment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        reason,
-        ...(otherText?.trim() ? { other_text: otherText.trim() } : {}),
-      }),
-    });
-  }
-
   return (
     <div className="flex min-h-screen flex-col bg-[#FFFDF8] text-zinc-900">
       <Navbar isSubscriber={isSubscriber} creditBalance={creditBalance} />
@@ -1134,7 +1069,6 @@ export function ReversePromptHome({
                     email?: string;
                   };
                   if (res.ok && data.subscribed === true) {
-                    clearCheckoutNavigationState();
                     setBillingStatus(data);
                     setMonthlyLimitReached(false);
                     setLimitErrorType(null);
@@ -1205,7 +1139,6 @@ export function ReversePromptHome({
                     reconciled?: boolean;
                   };
                   if (res.ok && data.reconciled === true) {
-                    clearCheckoutNavigationState();
                     setBillingStatus(data);
                     setMonthlyLimitReached(false);
                     setLimitErrorType(null);
@@ -1613,93 +1546,6 @@ export function ReversePromptHome({
       </footer>
 
       <AuthModal isOpen={showAuthModal} onClose={closeAuthModal} />
-
-      {showAbandonmentSurvey ? (
-        <div
-          className="fixed bottom-6 right-6 z-[60] w-[min(100vw-3rem,20rem)]"
-          role="dialog"
-          aria-labelledby="checkout-abandon-title"
-          aria-modal="false"
-        >
-          <div className="relative">
-            <div
-              className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900"
-              aria-hidden
-            />
-            <div className="relative z-10 rounded-xl border-[3px] border-zinc-900 bg-[#fff4da] p-5">
-              <div className="flex items-start justify-between gap-2">
-                <h2
-                  id="checkout-abandon-title"
-                  className="pr-2 text-sm font-semibold leading-snug text-zinc-900"
-                >
-                  What stopped you from upgrading?
-                </h2>
-                <button
-                  type="button"
-                  onClick={dismissAbandonmentSurvey}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded border-[2px] border-zinc-900 bg-white text-lg font-bold leading-none text-zinc-900 transition-colors hover:bg-[#ffc480]"
-                  aria-label="Dismiss"
-                >
-                  ×
-                </button>
-              </div>
-              {abandonmentShowOther ? (
-                <div className="mt-3 flex flex-col gap-2">
-                  <div className="relative">
-                    <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-900" />
-                    <textarea
-                      autoFocus
-                      rows={3}
-                      value={abandonmentOtherText}
-                      onChange={(e) => setAbandonmentOtherText(e.target.value)}
-                      placeholder="Tell us more…"
-                      className="relative z-10 w-full resize-none rounded border-[2px] border-zinc-900 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        submitCheckoutAbandonmentReason(
-                          "other",
-                          abandonmentOtherText
-                        )
-                      }
-                      className="rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
-                    >
-                      Send
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAbandonmentShowOther(false)}
-                      className="rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50"
-                    >
-                      Back
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {CHECKOUT_ABANDONMENT_OPTIONS.map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() =>
-                        value === "other"
-                          ? setAbandonmentShowOther(true)
-                          : submitCheckoutAbandonmentReason(value)
-                      }
-                      className="rounded border-[2px] border-zinc-900 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-[#ffc480]"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
