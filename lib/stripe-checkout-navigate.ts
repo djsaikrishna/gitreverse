@@ -3,7 +3,6 @@
  */
 
 const PENDING_REDIRECT_KEY = "gr_pending_redirect";
-const CHECKOUT_NAVIGATION_STATE_KEY = "gr_checkout_navigation_state";
 
 export const PAYMENT_LINK =
   (typeof process !== "undefined" &&
@@ -41,11 +40,6 @@ export async function beginCreditCheckout(
     if (!res.ok || !data.url) {
       throw new Error("checkout_unavailable");
     }
-    try {
-      sessionStorage.setItem(CHECKOUT_NAVIGATION_STATE_KEY, "started");
-    } catch {
-      /* ignore */
-    }
     window.location.href = data.url;
   } catch (err) {
     throw err instanceof Error ? err : new Error("checkout_unavailable");
@@ -79,20 +73,10 @@ export async function beginStripeCheckout(
     if (!res.ok || !data.url) {
       throw new Error("checkout_unavailable");
     }
-    try {
-      sessionStorage.setItem(CHECKOUT_NAVIGATION_STATE_KEY, "started");
-    } catch {
-      /* ignore */
-    }
     window.location.href = data.url;
   } catch {
     if (!PAYMENT_LINK) {
       throw new Error("checkout_unavailable");
-    }
-    try {
-      sessionStorage.setItem(CHECKOUT_NAVIGATION_STATE_KEY, "started");
-    } catch {
-      /* ignore */
     }
     window.location.href = PAYMENT_LINK;
   }
