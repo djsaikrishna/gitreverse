@@ -12,10 +12,9 @@ import { ReverseGenerationFlavorText } from "@/components/reverse-generation-fla
 import { useAuth } from "@/contexts/AuthContext";
 import { HOME_EXAMPLES } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
-import { saveReturnPath } from "@/lib/stripe-checkout-navigate";
+import { beginCreditCheckout, saveReturnPath } from "@/lib/stripe-checkout-navigate";
 import {
   buildDefaultBillingStatus,
-  getPlanLabel,
   type BillingStatus,
 } from "@/lib/billing-config";
 import { fetchBillingStatus } from "@/lib/subscription-status-client";
@@ -191,6 +190,9 @@ export function ReversePromptHome({
   const [checkoutVerifyState, setCheckoutVerifyState] = useState<
     "idle" | "verifying" | "still_processing"
   >("idle");
+  const [creditCheckoutVerifyState, setCreditCheckoutVerifyState] = useState<
+    "idle" | "verifying" | "still_processing"
+  >("idle");
   const [showAbandonmentSurvey, setShowAbandonmentSurvey] = useState(false);
   const [abandonmentOtherText, setAbandonmentOtherText] = useState("");
   const [abandonmentShowOther, setAbandonmentShowOther] = useState(false);
@@ -212,21 +214,25 @@ export function ReversePromptHome({
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const autoSubmitStartedRef = useRef(false);
   const isSubscriber = billingStatus.subscribed;
-  const nextPlanLabel = billingStatus.nextPlan
-    ? getPlanLabel(billingStatus.nextPlan)
-    : null;
+  const creditBalance = billingStatus.credits.balance;
+  const canUseDeep = billingStatus.deepReverse.canUse;
+  const canUseManual = billingStatus.manualControl.canUse;
   const limitTitle =
     limitErrorType === "daily_limit_reached"
       ? "You’ve hit today’s safety limit."
-      : billingStatus.plan === "free"
-        ? "You’ve hit this month’s manual control limit."
-        : `You’ve hit your ${getPlanLabel(billingStatus.plan)} limit.`;
-  const limitCtaLabel =
-    billingStatus.plan === "free"
-      ? "See Premium"
-      : nextPlanLabel
-        ? `Upgrade to ${nextPlanLabel}`
-        : null;
+      : "You’re out of credits.";
+  const limitCtaLabel = "Buy credits — $1/reverse";
+
+  const buyCredits = useCallback(() => {
+    if (!isAuthenticated) {
+      setShowAuthModal(true);
+      return;
+    }
+    setError(null);
+    void beginCreditCheckout(session?.access_token).catch(() => {
+      setError("Checkout unavailable. Try again in a moment.");
+    });
+  }, [isAuthenticated, session?.access_token]);
 
   const refreshBillingStatus = useCallback(async () => {
     const token = session?.access_token;
@@ -288,11 +294,52 @@ export function ReversePromptHome({
 
     async function hydrateSubscriber() {
       const params = new URLSearchParams(window.location.search);
+      const creditSessionId = params.get("credit_session_id")?.trim();
       const sessionId = params.get("session_id")?.trim();
       const token = session?.access_token;
 
-      if (!sessionId) {
+      if (!sessionId && !creditSessionId) {
         localStorage.removeItem(PENDING_REDIRECT_KEY);
+      }
+
+      if (creditSessionId) {
+        if (!token) {
+          if (!cancelled) setSubscriberHydrated(true);
+          return;
+        }
+        setCreditCheckoutVerifyState("verifying");
+        try {
+          const res = await fetch(
+            `/api/verify-credit-purchase?session_id=${encodeURIComponent(creditSessionId)}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const data = (await res.json()) as BillingStatus & {
+            reconciled?: boolean;
+            error?: string;
+          };
+          if (cancelled) return;
+          if (res.ok && data.reconciled === true) {
+            clearCheckoutNavigationState();
+            setBillingStatus(data);
+            setMonthlyLimitReached(false);
+            setLimitErrorType(null);
+            setPremiumUpsellFeature(null);
+            setCreditCheckoutVerifyState("idle");
+            const pendingRedirect = localStorage.getItem(PENDING_REDIRECT_KEY);
+            localStorage.removeItem(PENDING_REDIRECT_KEY);
+            if (pendingRedirect) {
+              void router.push(pendingRedirect);
+            } else {
+              window.history.replaceState(null, "", window.location.pathname);
+            }
+          } else {
+            setCreditCheckoutVerifyState("still_processing");
+          }
+        } catch {
+          if (!cancelled) setCreditCheckoutVerifyState("still_processing");
+        }
+        if (!cancelled) setSubscriberHydrated(true);
+        return;
       }
 
       if (sessionId) {
@@ -454,13 +501,16 @@ export function ReversePromptHome({
             if (res.status === 429 || res.status === 403) {
               const limitErr =
                 data.error === "monthly_limit_reached" ||
-                data.error === "daily_limit_reached";
+                data.error === "daily_limit_reached" ||
+                data.error === "out_of_credits";
               if (limitErr) {
                 setMonthlyLimitReached(true);
                 setLimitErrorType(
                   data.error === "daily_limit_reached"
                     ? "daily_limit_reached"
-                    : "monthly_limit_reached"
+                    : data.error === "out_of_credits"
+                      ? null
+                      : "monthly_limit_reached"
                 );
                 void refreshBillingStatus();
               } else if (data.error === "premium_required") {
@@ -532,13 +582,16 @@ export function ReversePromptHome({
             if (res.status === 429 || res.status === 403) {
               const limitErr =
                 errData.error === "monthly_limit_reached" ||
-                errData.error === "daily_limit_reached";
+                errData.error === "daily_limit_reached" ||
+                errData.error === "out_of_credits";
               if (limitErr) {
                 setMonthlyLimitReached(true);
                 setLimitErrorType(
                   errData.error === "daily_limit_reached"
                     ? "daily_limit_reached"
-                    : "monthly_limit_reached"
+                    : errData.error === "out_of_credits"
+                      ? null
+                      : "monthly_limit_reached"
                 );
                 void refreshBillingStatus();
               } else if (errData.error === "premium_required") {
@@ -677,7 +730,7 @@ export function ReversePromptHome({
       openAuthModalWithPending({ type: "deep", repoUrl: input });
       return;
     }
-    if (!isSubscriber) {
+    if (!canUseDeep) {
       openPremiumUpsell("deep");
       return;
     }
@@ -694,7 +747,7 @@ export function ReversePromptHome({
     openPremiumUpsell,
     loading,
     repoUrl,
-    isSubscriber,
+    canUseDeep,
     initialRepoInput,
     router,
     runCustomReverse,
@@ -719,13 +772,13 @@ export function ReversePromptHome({
       return;
     }
     if (action.type === "deep") {
-      if (!isSubscriber) {
+      if (!canUseDeep) {
         openPremiumUpsell("deep");
         return;
       }
       void runCustomReverse(action.repoUrl, { mode: "deep" });
     } else if (action.type === "manual") {
-      if (!isSubscriber) {
+      if (!canUseManual) {
         openPremiumUpsell("manual");
         return;
       }
@@ -735,7 +788,8 @@ export function ReversePromptHome({
     isAuthenticated,
     openPremiumUpsell,
     subscriberHydrated,
-    isSubscriber,
+    canUseDeep,
+    canUseManual,
     runCustomReverse,
   ]);
 
@@ -757,7 +811,7 @@ export function ReversePromptHome({
           });
           return;
         }
-        if (!isSubscriber) {
+        if (!canUseManual) {
           openPremiumUpsell("manual");
           return;
         }
@@ -784,7 +838,7 @@ export function ReversePromptHome({
         });
         return;
       }
-      if (!isSubscriber) {
+      if (!canUseManual) {
         openPremiumUpsell("manual");
         return;
       }
@@ -819,7 +873,7 @@ export function ReversePromptHome({
         openAuthModalWithPending({ type: "deep", repoUrl: trimmed });
         return;
       }
-      if (!isSubscriber) {
+      if (!canUseDeep) {
         openPremiumUpsell("deep");
         return;
       }
@@ -833,7 +887,7 @@ export function ReversePromptHome({
         openAuthModalWithPending({ type: "manual", repoUrl: trimmed, focus });
         return;
       }
-      if (!isSubscriber) {
+      if (!canUseManual) {
         openPremiumUpsell("manual");
         return;
       }
@@ -856,7 +910,8 @@ export function ReversePromptHome({
     openPremiumUpsell,
     runCustomReverse,
     runReversePrompt,
-    isSubscriber,
+    canUseDeep,
+    canUseManual,
   ]);
 
   useEffect(() => {
@@ -868,7 +923,7 @@ export function ReversePromptHome({
       openAuthModalWithPending({ type: "deep", repoUrl: trimmed });
       return;
     }
-    if (isSubscriber) return;
+    if (canUseDeep) return;
     openPremiumUpsell("deep");
   }, [
     initialGenerationKind,
@@ -878,7 +933,7 @@ export function ReversePromptHome({
     openPremiumUpsell,
     preserveUrl,
     subscriberHydrated,
-    isSubscriber,
+    canUseDeep,
   ]);
 
   /* `/owner/repo` uses quick auto-submit; `/owner/repo/deep` and `/owner/repo/<focus>` use the branches above. */
@@ -1034,7 +1089,7 @@ export function ReversePromptHome({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FFFDF8] text-zinc-900">
-      <Navbar isSubscriber={isSubscriber} />
+      <Navbar isSubscriber={isSubscriber} creditBalance={creditBalance} />
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center gap-12 px-4 py-12 sm:px-6">
         {checkoutVerifyState === "verifying" ? (
@@ -1102,6 +1157,65 @@ export function ReversePromptHome({
                   }
                 } catch {
                   setCheckoutVerifyState("still_processing");
+                }
+              }}
+              className="mt-3 rounded border-[2px] border-amber-700 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {creditCheckoutVerifyState === "verifying" ? (
+          <div
+            className="w-full max-w-2xl rounded-lg border-[3px] border-zinc-400 bg-zinc-50 p-4 text-center text-sm text-zinc-800"
+            role="status"
+            aria-live="polite"
+          >
+            Confirming your credits…
+          </div>
+        ) : null}
+        {creditCheckoutVerifyState === "still_processing" ? (
+          <div
+            className="w-full max-w-2xl rounded-lg border-[3px] border-amber-400 bg-amber-50 p-4"
+            role="alert"
+          >
+            <p className="text-sm font-semibold text-amber-900">
+              Payment is still syncing
+            </p>
+            <p className="mt-2 text-sm text-amber-800">
+              Wait a few seconds and retry — we add credits as soon as Stripe
+              syncs.
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                const sid = new URLSearchParams(window.location.search)
+                  .get("credit_session_id")
+                  ?.trim();
+                if (!sid || !session?.access_token) return;
+                setCreditCheckoutVerifyState("verifying");
+                try {
+                  const res = await fetch(
+                    `/api/verify-credit-purchase?session_id=${encodeURIComponent(sid)}`,
+                    {
+                      headers: { Authorization: `Bearer ${session.access_token}` },
+                    }
+                  );
+                  const data = (await res.json()) as BillingStatus & {
+                    reconciled?: boolean;
+                  };
+                  if (res.ok && data.reconciled === true) {
+                    clearCheckoutNavigationState();
+                    setBillingStatus(data);
+                    setMonthlyLimitReached(false);
+                    setLimitErrorType(null);
+                    setCreditCheckoutVerifyState("idle");
+                    window.history.replaceState(null, "", window.location.pathname);
+                  } else {
+                    setCreditCheckoutVerifyState("still_processing");
+                  }
+                } catch {
+                  setCreditCheckoutVerifyState("still_processing");
                 }
               }}
               className="mt-3 rounded border-[2px] border-amber-700 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
@@ -1252,21 +1366,26 @@ export function ReversePromptHome({
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       {limitCtaLabel ? (
-                        <Link
-                          href="/premium"
-                          onClick={saveReturnPath}
+                        <button
+                          type="button"
+                          onClick={() => void buyCredits()}
                           className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
                         >
                           {limitCtaLabel}
+                        </button>
+                      ) : null}
+                      {!isSubscriber ? (
+                        <Link
+                          href="/premium"
+                          onClick={saveReturnPath}
+                          className="inline-flex items-center justify-center rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
+                        >
+                          Subscribe — $9/mo
                         </Link>
                       ) : null}
                       <Link
                         href="/library"
-                        className={`inline-flex items-center justify-center rounded border-[2px] px-3 py-1.5 text-sm font-semibold transition-colors ${
-                          limitCtaLabel
-                            ? "border-zinc-400 bg-white text-zinc-800 hover:bg-zinc-50"
-                            : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
-                        }`}
+                        className="inline-flex items-center justify-center rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
                       >
                         Browse Library
                       </Link>
@@ -1298,17 +1417,26 @@ export function ReversePromptHome({
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <p className="text-sm font-semibold text-zinc-900">
                       {premiumUpsellFeature === "deep"
-                        ? "Deep Reverse is only available on Premium."
-                        : "Manual control is only available on Premium."}
+                        ? "You’re out of credits for Deep Reverse."
+                        : "You’re out of credits for Manual control."}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={goToPremium}
+                        onClick={() => void buyCredits()}
                         className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
                       >
-                        Upgrade
+                        Buy credits — $1/reverse
                       </button>
+                      {!isSubscriber ? (
+                        <button
+                          type="button"
+                          onClick={goToPremium}
+                          className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
+                        >
+                          Subscribe — $9/mo
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={closePremiumUpsell}

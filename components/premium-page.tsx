@@ -8,7 +8,7 @@ import {
 } from "@/lib/billing-config";
 import { Navbar } from "@/components/navbar";
 import { useAuth } from "@/contexts/AuthContext";
-import { beginStripeCheckout } from "@/lib/stripe-checkout-navigate";
+import { beginCreditCheckout, beginStripeCheckout } from "@/lib/stripe-checkout-navigate";
 import { fetchBillingStatus } from "@/lib/subscription-status-client";
 
 function IconCheck({ size = 16 }: { size?: number }) {
@@ -52,7 +52,9 @@ export function PremiumPage() {
   const { session, isAuthenticated, isLoading: authLoading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(false);
+  const [pendingCreditCheckout, setPendingCreditCheckout] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [creditCheckoutBusy, setCreditCheckoutBusy] = useState(false);
   const [billingStatus, setBillingStatus] = useState<BillingStatus>(
     buildDefaultBillingStatus()
   );
@@ -99,12 +101,29 @@ export function PremiumPage() {
       });
   }, [pendingCheckout, isAuthenticated, authLoading, session?.access_token]);
 
+  useEffect(() => {
+    if (!pendingCreditCheckout || !isAuthenticated || authLoading) return;
+    setPendingCreditCheckout(false);
+    setShowAuthModal(false);
+    setCreditCheckoutBusy(true);
+    setError(null);
+    void beginCreditCheckout(session?.access_token)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Checkout unavailable.");
+      })
+      .finally(() => {
+        setCreditCheckoutBusy(false);
+      });
+  }, [pendingCreditCheckout, isAuthenticated, authLoading, session?.access_token]);
+
   const handleAuthModalClose = useCallback(() => {
     setShowAuthModal(false);
     setPendingCheckout(false);
+    setPendingCreditCheckout(false);
   }, []);
 
   const isSubscriber = billingStatus.subscribed;
+  const creditBalance = billingStatus.credits.balance;
 
   const handleSubscribe = useCallback(() => {
     if (isSubscriber) return;
@@ -125,6 +144,24 @@ export function PremiumPage() {
       });
   }, [authLoading, isAuthenticated, isSubscriber, session?.access_token]);
 
+  const handleBuyCredits = useCallback(() => {
+    if (authLoading) return;
+    setError(null);
+    if (!isAuthenticated) {
+      setPendingCreditCheckout(true);
+      setShowAuthModal(true);
+      return;
+    }
+    setCreditCheckoutBusy(true);
+    void beginCreditCheckout(session?.access_token)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Checkout unavailable.");
+      })
+      .finally(() => {
+        setCreditCheckoutBusy(false);
+      });
+  }, [authLoading, isAuthenticated, session?.access_token]);
+
   const ctaDisabled = checkoutBusy || authLoading || !statusLoaded || isSubscriber;
   const ctaLabel = (() => {
     if (isSubscriber) return "You’re already on Premium";
@@ -135,12 +172,17 @@ export function PremiumPage() {
 
   return (
     <div className="min-h-[100vh] bg-[#fffdf8] text-zinc-900">
-      <Navbar isSubscriber={isSubscriber} />
+      <Navbar isSubscriber={isSubscriber} creditBalance={creditBalance} />
 
       <div className="mx-auto flex max-w-4xl flex-col items-center px-6 pb-3 pt-12 text-center sm:px-8 sm:pt-16 md:pb-4">
         <h1 className="m-0 max-w-[100%] text-center text-[clamp(0.9375rem,calc(0.65rem+3.85vw),3.75rem)] font-extrabold leading-none tracking-tight text-zinc-900 whitespace-nowrap">
           Reverse more, build better
         </h1>
+        {creditBalance > 0 ? (
+          <p className="mt-4 text-sm font-semibold text-zinc-600">
+            You have {creditBalance} credit{creditBalance === 1 ? "" : "s"} available.
+          </p>
+        ) : null}
       </div>
 
       {error ? (
@@ -151,7 +193,7 @@ export function PremiumPage() {
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-[440px] px-6 pb-12 sm:px-8">
+      <div className="mx-auto flex max-w-[440px] flex-col gap-6 px-6 pb-12 sm:px-8">
         <div className="relative isolate">
           <div
             className="pointer-events-none absolute inset-0 rounded-lg bg-zinc-900"
@@ -206,6 +248,68 @@ export function PremiumPage() {
 
             <p className="m-0 text-center text-xs leading-relaxed text-zinc-500">
               Cancel anytime. No hidden fees.
+            </p>
+          </div>
+        </div>
+
+        <div className="relative isolate">
+          <div
+            className="pointer-events-none absolute inset-0 rounded-lg bg-zinc-900"
+            style={{ transform: "translate(5px,5px)" }}
+            aria-hidden
+          />
+          <div className="relative flex flex-col gap-3.5 rounded-lg border-[2.5px] border-zinc-900 bg-white p-5 sm:p-6">
+            <div>
+              <div className="mb-1 text-xs font-semibold tracking-wide text-zinc-600">
+                PAY AS YOU GO
+              </div>
+              <div className="text-4xl font-extrabold tracking-tight sm:text-[2.5rem]">
+                $1
+                <span className="text-base font-semibold text-zinc-500 sm:text-lg">
+                  /reverse
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-y border-zinc-900 py-3.5">
+              <FeatureRow
+                title="No subscription required"
+                description="Buy only what you need — each credit is one Deep Reverse or Manual control run."
+              />
+              <FeatureRow
+                title="Credits never expire"
+                description="Use them whenever you want. Stack as many as you like at checkout."
+              />
+              <FeatureRow
+                title="Quick reverse stays free"
+                description="Use the fast path for lightweight inspiration before you buy credits."
+              />
+            </div>
+
+            <div>
+              <span className="relative isolate block">
+                <span
+                  className="pointer-events-none absolute inset-0 rounded-md bg-zinc-900"
+                  style={{ transform: "translate(3px,3px)" }}
+                  aria-hidden
+                />
+                <button
+                  type="button"
+                  disabled={creditCheckoutBusy || authLoading || !statusLoaded}
+                  onClick={() => void handleBuyCredits()}
+                  className="relative z-10 w-full cursor-pointer rounded-md border-[2.5px] border-zinc-900 bg-white px-4 py-2.5 text-sm font-bold text-zinc-900 transition-transform duration-100 enabled:hover:-translate-x-px enabled:hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-base"
+                >
+                  {creditCheckoutBusy
+                    ? "Processing…"
+                    : authLoading || !statusLoaded
+                      ? "…"
+                      : "Buy Credits"}
+                </button>
+              </span>
+            </div>
+
+            <p className="m-0 text-center text-xs leading-relaxed text-zinc-500">
+              Choose how many credits to buy on the Stripe checkout page.
             </p>
           </div>
         </div>

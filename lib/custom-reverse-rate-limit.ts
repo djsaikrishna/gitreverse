@@ -13,6 +13,9 @@ const RATE_LIMIT_RPC_TIMEOUT_MS = 2500;
 
 /** Skip DB-backed limits while developing locally or when explicitly opted out. */
 function shouldSkipCustomReverseRateLimit(req: NextRequest): boolean {
+  if (process.env.GITREVERSE_FORCE_BILLING_CHECKS === "true") {
+    return false;
+  }
   if (process.env.GITREVERSE_SKIP_CUSTOM_REVERSE_RATE_LIMIT === "true") {
     return true;
   }
@@ -93,12 +96,16 @@ export async function enforceCustomReverseRateLimit(
           ? payload.remaining
           : 0;
       const status = errorCode === "premium_required" ? 403 : 429;
+      const httpStatus =
+        errorCode === "premium_required" || errorCode === "out_of_credits"
+          ? 403
+          : 429;
       return NextResponse.json(
         {
           error: errorCode,
           remaining,
         },
-        { status }
+        { status: httpStatus }
       );
     }
   } catch (e) {

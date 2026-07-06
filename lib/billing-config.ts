@@ -21,12 +21,17 @@ export type BillingFeatureStatus = {
   canUse: boolean;
 };
 
+export type BillingCreditsStatus = {
+  balance: number;
+};
+
 export type BillingStatus = {
   subscribed: boolean;
   plan: BillingPlan;
   priceId: string | null;
   isLegacy: boolean;
   nextPlan: "starter" | "pro" | "unlimited" | null;
+  credits: BillingCreditsStatus;
   deepReverse: BillingFeatureStatus;
   manualControl: BillingFeatureStatus;
 };
@@ -36,7 +41,11 @@ export const STRIPE_PRICE_IDS = {
   starter: "price_1TfvMRIBG5KwEK8aVwcI83zp",
   pro: "price_1TfvMRIBG5KwEK8aYeCaGRML",
   unlimited: "price_1TfvMRIBG5KwEK8a5aETT5X8",
+  credit: "price_1Tq9A8IBG5KwEK8aYIUW1fVp",
 } as const;
+
+/** Hardcoded in reconcile_user_credits migration SQL — keep in sync. */
+export const CREDIT_STRIPE_PRICE_ID = STRIPE_PRICE_IDS.credit;
 
 export const FREE_MANUAL_LIMIT = 0;
 export const STARTER_LIMIT = 5;
@@ -82,7 +91,19 @@ export function getPlanLabel(plan: BillingPlan): string {
   }
 }
 
-function featureForPlan(plan: BillingPlan): BillingFeatureStatus {
+function featureForPlan(
+  plan: BillingPlan,
+  creditBalance = 0
+): BillingFeatureStatus {
+  if (creditBalance >= 1) {
+    return {
+      limit: null,
+      remaining: creditBalance,
+      window: null,
+      canUse: true,
+    };
+  }
+
   if (plan === "free") {
     return {
       limit: 0,
@@ -122,7 +143,10 @@ function featureForPlan(plan: BillingPlan): BillingFeatureStatus {
   };
 }
 
-export function buildDefaultBillingStatus(plan: BillingPlan = "free"): BillingStatus {
+export function buildDefaultBillingStatus(
+  plan: BillingPlan = "free",
+  creditBalance = 0
+): BillingStatus {
   return {
     subscribed: isPaidPlan(plan),
     plan,
@@ -138,8 +162,9 @@ export function buildDefaultBillingStatus(plan: BillingPlan = "free"): BillingSt
               : null,
     isLegacy: plan === "legacy_unlimited",
     nextPlan: getNextPlan(plan),
-    deepReverse: featureForPlan(plan),
-    manualControl: featureForPlan(plan),
+    credits: { balance: creditBalance },
+    deepReverse: featureForPlan(plan, creditBalance),
+    manualControl: featureForPlan(plan, creditBalance),
   };
 }
 
@@ -179,7 +204,21 @@ export function coerceBillingStatus(value: unknown): BillingStatus {
 
   const raw = value as Record<string, unknown>;
   const plan = normalizePlan(raw.plan);
-  const fallback = buildDefaultBillingStatus(plan);
+  const fallbackCredits =
+    raw.credits &&
+    typeof raw.credits === "object" &&
+    typeof (raw.credits as Record<string, unknown>).balance === "number"
+      ? ((raw.credits as Record<string, unknown>).balance as number)
+      : 0;
+  const fallback = buildDefaultBillingStatus(plan, fallbackCredits);
+
+  const creditsRaw = raw.credits;
+  const creditsBalance =
+    creditsRaw &&
+    typeof creditsRaw === "object" &&
+    typeof (creditsRaw as Record<string, unknown>).balance === "number"
+      ? ((creditsRaw as Record<string, unknown>).balance as number)
+      : fallback.credits.balance;
 
   return {
     subscribed:
@@ -195,6 +234,7 @@ export function coerceBillingStatus(value: unknown): BillingStatus {
       raw.nextPlan === null
         ? (raw.nextPlan as BillingStatus["nextPlan"])
         : fallback.nextPlan,
+    credits: { balance: creditsBalance },
     deepReverse: coerceFeatureStatus(raw.deepReverse, fallback.deepReverse),
     manualControl: coerceFeatureStatus(
       raw.manualControl,
