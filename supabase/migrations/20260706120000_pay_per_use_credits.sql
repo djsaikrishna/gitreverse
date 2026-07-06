@@ -367,3 +367,33 @@ AS $$
       AND l.stripe_checkout_session_id = p_session_id
   );
 $$;
+
+-- Grant credits for a specific Stripe checkout session (called from verify-credit-purchase API route)
+CREATE OR REPLACE FUNCTION public.grant_credits_for_session(
+  p_user_id uuid,
+  p_session_id text,
+  p_credits integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_balance integer := 0;
+BEGIN
+  IF COALESCE(p_user_id::text, '') = '' OR p_session_id IS NULL OR p_credits <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'invalid_input');
+  END IF;
+
+  INSERT INTO public.user_credit_ledger (user_id, delta, reason, stripe_checkout_session_id)
+  VALUES (p_user_id::text, p_credits, 'purchase', p_session_id)
+  ON CONFLICT (stripe_checkout_session_id) DO NOTHING;
+
+  SELECT COALESCE(SUM(delta), 0)::integer INTO v_balance
+  FROM public.user_credit_ledger
+  WHERE user_id = p_user_id::text;
+
+  RETURN jsonb_build_object('ok', true, 'balance', v_balance);
+END;
+$$;

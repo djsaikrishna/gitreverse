@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAuthenticatedUser } from "@/lib/auth-request";
 import { getBillingStatus } from "@/lib/subscriber";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { STRIPE_PRICE_IDS } from "@/lib/billing-config";
 
 export const runtime = "nodejs";
@@ -21,8 +21,7 @@ async function grantCreditsFromStripe(
   sessionId: string
 ): Promise<{ granted: boolean; credits: number }> {
   const stripe = getStripeClient();
-  const supabase = getSupabase();
-  if (!stripe || !supabase) return { granted: false, credits: 0 };
+  if (!stripe) return { granted: false, credits: 0 };
 
   let session: Stripe.Checkout.Session;
   try {
@@ -47,8 +46,11 @@ async function grantCreditsFromStripe(
 
   const quantity = creditLine.quantity ?? 1;
 
-  // Write to ledger — ON CONFLICT DO NOTHING makes this safe to call again
-  const { error } = await supabase.from("user_credit_ledger").insert({
+  // Use service role client — bypasses RLS safely because this is server-only code
+  const admin = getSupabaseAdmin();
+  if (!admin) return { granted: false, credits: 0 };
+
+  const { error } = await admin.from("user_credit_ledger").insert({
     user_id: userId,
     delta: quantity,
     reason: "purchase",
