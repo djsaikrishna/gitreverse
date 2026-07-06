@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { AdventoryBanner } from "@/components/adventory-banner";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
@@ -1340,6 +1341,7 @@ export function ReversePromptHome({
               ) : null}
             </form>
           </div>
+          <AdventoryBanner className="w-full" />
           {isHome && (
             <p className="text-center text-sm text-zinc-500">
               You can also replace{" "}
