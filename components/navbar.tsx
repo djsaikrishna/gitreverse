@@ -149,6 +149,7 @@ function userInitials(user: User): string {
 
 export type NavbarProps = {
   isSubscriber?: boolean;
+  creditBalance?: number;
 };
 
 function NavDivider() {
@@ -189,7 +190,7 @@ function LibraryNavLink({ isActive }: { isActive: boolean }) {
   );
 }
 
-export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
+export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBalanceProp }: NavbarProps) {
   const pathname = usePathname();
   const {
     user,
@@ -202,10 +203,12 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
     Boolean(!AUTH_SKIP && isSupabaseAuthConfigured());
 
   const [planFromApi, setPlanFromApi] = useState<BillingPlan>("free");
+  const [creditBalanceFromApi, setCreditBalanceFromApi] = useState(0);
   useEffect(() => {
     const token = session?.access_token;
     if (!token) {
       setPlanFromApi("free");
+      setCreditBalanceFromApi(0);
       return;
     }
 
@@ -213,9 +216,15 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
     void (async () => {
       try {
         const status = await fetchBillingStatus(token);
-        if (!cancelled) setPlanFromApi(status.plan);
+        if (!cancelled) {
+          setPlanFromApi(status.plan);
+          setCreditBalanceFromApi(status.credits.balance);
+        }
       } catch {
-        if (!cancelled) setPlanFromApi("free");
+        if (!cancelled) {
+          setPlanFromApi("free");
+          setCreditBalanceFromApi(0);
+        }
       }
     })();
 
@@ -225,6 +234,7 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
   }, [session?.access_token]);
 
   const isSubscriber = Boolean(isSubscriberProp) || planFromApi !== "free";
+  const creditBalance = creditBalanceProp ?? creditBalanceFromApi;
   const planLabel =
     isSubscriber && isSubscriberProp ? "Premium" : getPlanLabel(planFromApi);
 
@@ -404,6 +414,11 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
                             {planLabel}
                           </span>
                         ) : null}
+                        {creditBalance > 0 ? (
+                          <span className="mt-2 inline-flex items-center rounded border-[1.5px] border-zinc-900 bg-white px-2 py-0.5 text-[11px] font-bold text-zinc-900">
+                            {creditBalance} credit{creditBalance === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
                       </div>
                       <Link
                         href="/history"
@@ -422,7 +437,17 @@ export function Navbar({ isSubscriber: isSubscriberProp }: NavbarProps) {
                           onClick={() => setMenuOpen(false)}
                         >
                           <IconPremiumBadge size={15} />
-                          Premium
+                          Premium & credits
+                        </Link>
+                      ) : creditBalance === 0 ? (
+                        <Link
+                          href="/premium"
+                          role="menuitem"
+                          className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          <IconPremiumBadge size={15} />
+                          Buy credits
                         </Link>
                       ) : null}
                       {isSubscriber ? (

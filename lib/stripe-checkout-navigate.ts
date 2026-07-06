@@ -21,6 +21,37 @@ export function saveReturnPath(): void {
   }
 }
 
+export async function beginCreditCheckout(
+  accessToken?: string | null
+): Promise<void> {
+  if (typeof window === "undefined") return;
+  savePendingRedirect();
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (accessToken?.trim()) {
+      headers.Authorization = `Bearer ${accessToken.trim()}`;
+    }
+    const res = await fetch("/api/create-credit-checkout", {
+      method: "POST",
+      headers,
+    });
+    const data = (await res.json()) as { url?: string };
+    if (!res.ok || !data.url) {
+      throw new Error("checkout_unavailable");
+    }
+    try {
+      sessionStorage.setItem(CHECKOUT_NAVIGATION_STATE_KEY, "started");
+    } catch {
+      /* ignore */
+    }
+    window.location.href = data.url;
+  } catch (err) {
+    throw err instanceof Error ? err : new Error("checkout_unavailable");
+  }
+}
+
 function savePendingRedirect(): void {
   // Only saves if nothing was pre-saved (e.g. from a "Get Unlimited" click)
   saveReturnPath();

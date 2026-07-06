@@ -13,6 +13,14 @@ export const runtime = "nodejs";
 
 const DEFAULT_CUSTOM_REVERSE_URL = "http://localhost:3001";
 
+function shouldSkipBillingGate(): boolean {
+  if (process.env.GITREVERSE_FORCE_BILLING_CHECKS === "true") {
+    return false;
+  }
+  return process.env.NODE_ENV === "development";
+}
+
+
 function getServiceUrl(): string {
   return (
     process.env.CUSTOM_REVERSE_SERVICE_URL?.trim() || DEFAULT_CUSTOM_REVERSE_URL
@@ -428,11 +436,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (process.env.NODE_ENV !== "development") {
+  if (!shouldSkipBillingGate()) {
     const status = await getBillingStatusFromRequest(request);
     const canUse = isDeep ? status.deepReverse.canUse : status.manualControl.canUse;
     if (!canUse) {
-      return NextResponse.json({ error: "premium_required" }, { status: 403 });
+      return NextResponse.json({ error: "out_of_credits" }, { status: 403 });
     }
   }
 
