@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { AdventoryBanner } from "@/components/adventory-banner";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
@@ -1402,7 +1401,6 @@ export function ReversePromptHome({
               ) : null}
             </form>
           </div>
-          <AdventoryBanner className="w-full" />
           {isHome && (
             <p className="text-center text-sm text-zinc-500">
               You can also replace{" "}
@@ -1433,7 +1431,7 @@ export function ReversePromptHome({
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <a
-                    href="https://make.design"
+                    href="https://make.design/r/filiksyos"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Design this with make.design"
