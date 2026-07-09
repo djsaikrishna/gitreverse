@@ -1,3 +1,5 @@
+import { track } from "@vercel/analytics";
+
 const CODERABBIT_AFFILIATE_URL = "https://coderabbit.link/filiksyos-destaw";
 const CODERABBIT_ICON_URL =
   "https://www.coderabbit.ai/images/CR_mark_orange.svg";
@@ -48,6 +50,7 @@ export function CodeRabbitBanner({
         href={CODERABBIT_AFFILIATE_URL}
         target="_blank"
         rel="sponsored noopener noreferrer"
+        onClick={() => track("CodeRabbit Click", { placement: "home-card" })}
         className={`group flex items-center gap-3 rounded-lg border-[2px] border-zinc-900/15 bg-white/70 px-3 py-2.5 transition-colors hover:bg-white ${className ?? ""}`}
       >
         {content}
@@ -61,6 +64,7 @@ export function CodeRabbitBanner({
       href={CODERABBIT_AFFILIATE_URL}
       target="_blank"
       rel="sponsored noopener noreferrer"
+      onClick={() => track("CodeRabbit Click", { placement: "repo-card" })}
       className={`group relative mt-4 block ${className ?? ""}`}
     >
       <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg bg-zinc-900" />
