@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { AdventoryBanner } from "@/components/adventory-banner";
+import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
 
 
@@ -241,7 +241,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
           )}
         </div>
 
-        <AdventoryBanner className="w-full" />
+        <CodeRabbitBanner className="w-full" />
 
         {/* Count line */}
         {search ? (
