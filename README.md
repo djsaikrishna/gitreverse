@@ -84,3 +84,5 @@ pnpm build
 pnpm start
 pnpm lint
 ```
+
+<!-- GitAds-Verify: QL21GOFX8CJONRKJCB9MHXMCF4ZIHRHF -->
