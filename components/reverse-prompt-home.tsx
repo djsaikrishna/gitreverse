@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
@@ -1381,26 +1382,30 @@ export function ReversePromptHome({
                 </div>
               ) : null}
               {isHome && !loading && !customReverse ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="w-full text-sm text-zinc-600">
-                    Try example repos:
-                  </span>
-                  {HOME_EXAMPLES.map(({ label, url }) => (
-                    <div key={url} className="group relative">
-                      <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
-                      <button
-                        type="button"
-                        onClick={() => setRepoUrl(url)}
-                        className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#EBDBB7] px-3 py-1 text-sm font-medium text-zinc-900 transition-transform hover:bg-[#ffc480] group-hover:-translate-x-px group-hover:-translate-y-px"
-                      >
-                        {label}
-                      </button>
-                    </div>
-                  ))}
+                <div className="mt-4 flex flex-col gap-4">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="w-full text-sm text-zinc-600">
+                      Try example repos:
+                    </span>
+                    {HOME_EXAMPLES.map(({ label, url }) => (
+                      <div key={url} className="group relative">
+                        <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
+                        <button
+                          type="button"
+                          onClick={() => setRepoUrl(url)}
+                          className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#EBDBB7] px-3 py-1 text-sm font-medium text-zinc-900 transition-transform hover:bg-[#ffc480] group-hover:-translate-x-px group-hover:-translate-y-px"
+                        >
+                          {label}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <CodeRabbitBanner embedded />
                 </div>
               ) : null}
             </form>
           </div>
+          {!isHome ? <CodeRabbitBanner className="w-full" /> : null}
           {isHome && (
             <p className="text-center text-sm text-zinc-500">
               You can also replace{" "}
