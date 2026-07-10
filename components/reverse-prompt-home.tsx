@@ -1436,7 +1436,7 @@ export function ReversePromptHome({
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <a
-                    href="https://make.design/r/fili"
+                    href={`https://make.design/?ref=fili&prompt=${encodeURIComponent(prompt)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Design this with make.design"
