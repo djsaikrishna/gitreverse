@@ -12,6 +12,10 @@ import { ReverseGenerationFlavorText } from "@/components/reverse-generation-fla
 import { useAuth } from "@/contexts/AuthContext";
 import { HOME_EXAMPLES } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
+import {
+  parseWebsiteInput,
+  urlToSlug,
+} from "@/lib/parse-website-input";
 import { beginCreditCheckout, saveReturnPath } from "@/lib/stripe-checkout-navigate";
 import {
   buildDefaultBillingStatus,
@@ -151,6 +155,7 @@ export function ReversePromptHome({
       ? ""
       : (autoSubmitFocus?.trim() || initialManualFocus?.trim()) ?? "";
   const [repoUrl, setRepoUrl] = useState(initialRepoInput);
+  const [inputMode, setInputMode] = useState<"github" | "website">("github");
   const [customReverse, setCustomReverse] = useState(Boolean(initialFocus));
   const [customPrompt, setCustomPrompt] = useState(initialFocus);
   /** Hides “Deep Reverse” after a custom or deep run (not needed for that result). */
@@ -756,6 +761,21 @@ export function ReversePromptHome({
     if (loading) return;
     const trimmed = repoUrl.trim();
 
+    if (isHome && inputMode === "website") {
+      const parsed = parseWebsiteInput(trimmed);
+      if (!parsed) {
+        setError(
+          "Could not parse website URL. Use https://example.com or example.com."
+        );
+        return;
+      }
+      const slug = urlToSlug(parsed.hostname);
+      void router.push(
+        `/website/${encodeURIComponent(slug)}?url=${encodeURIComponent(parsed.url)}`
+      );
+      return;
+    }
+
     if (!initialRepoInput?.trim()) {
       const parsed = parseGitHubRepoInput(trimmed);
       if (!parsed) return;
@@ -1174,6 +1194,32 @@ export function ReversePromptHome({
             <h1 className="sr-only">{`${owner}/${repo} — reverse-engineered prompt`}</h1>
           ) : null}
           <div className="flex w-full max-w-2xl flex-col gap-3">
+          {isHome ? (
+            <div className="flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInputMode("github")}
+                className={`rounded-full border-[2px] border-zinc-900 px-4 py-1.5 text-sm font-medium transition-colors ${
+                  inputMode === "github"
+                    ? "bg-zinc-900 text-white"
+                    : "bg-white text-zinc-800 hover:bg-zinc-50"
+                }`}
+              >
+                GitHub repo
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode("website")}
+                className={`rounded-full border-[2px] border-zinc-900 px-4 py-1.5 text-sm font-medium transition-colors ${
+                  inputMode === "website"
+                    ? "bg-zinc-900 text-white"
+                    : "bg-white text-zinc-800 hover:bg-zinc-50"
+                }`}
+              >
+                Website (test)
+              </button>
+            </div>
+          ) : null}
           <div className="relative w-full">
             <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900" />
             <form
@@ -1188,7 +1234,11 @@ export function ReversePromptHome({
                       name="repoUrl"
                       autoComplete="off"
                       className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
-                      placeholder="https://github.com/…"
+                      placeholder={
+                        isHome && inputMode === "website"
+                          ? "https://linear.app"
+                          : "https://github.com/…"
+                      }
                       value={repoUrl}
                       onChange={(e) => setRepoUrl(e.target.value)}
                       required
@@ -1229,12 +1279,15 @@ export function ReversePromptHome({
                           </svg>
                           <span>Processing…</span>
                         </>
+                      ) : inputMode === "website" ? (
+                        "Reverse website"
                       ) : (
                         "Get Prompt"
                       )}
                     </button>
                   </div>
                 </div>
+                {!(isHome && inputMode === "website") ? (
                 <div className="flex w-full flex-col gap-2">
                   <label
                     className={`flex items-center gap-2 text-sm font-medium ${
@@ -1270,6 +1323,7 @@ export function ReversePromptHome({
                     </div>
                   ) : null}
                 </div>
+                ) : null}
               </div>
 
               {loading ? (

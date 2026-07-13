@@ -43,3 +43,6 @@ debug.log
 next-env.d.ts
 
 /mcps
+
+# website reverse test output
+.website-reverse/
