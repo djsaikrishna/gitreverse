@@ -17,7 +17,9 @@ export function buildWebsiteDesignSystemPrompt(): string {
 
 ## Task
 
-Given Firecrawl branding JSON and page markdown from a live website, write a complete design system markdown document.
+Given design evidence from a live website (Firecrawl branding and/or Context.dev styleguide + brand) and page markdown, write a complete design system markdown document.
+
+Use the provided design evidence as the primary source of design tokens. When Context.dev styleguide data is present, treat it as higher-confidence evidence (per-element typography, component-level CSS, spacing scale, shadows). When only Firecrawl branding is present, use that instead.
 
 ## Rules
 

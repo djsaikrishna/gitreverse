@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scrapeWebsite } from "@/lib/firecrawl-client";
 import { isValidWebsiteSlug, parseWebsiteInput } from "@/lib/parse-website-input";
 import { callQuickLlm, resolveLlmTarget } from "@/lib/quick-llm";
 import { buildWebsiteDesignSystemPrompt } from "@/lib/website-design-system-prompt";
 import { WEBSITE_REVERSE_SYSTEM_PROMPT } from "@/lib/website-reverse-system-prompt";
+import {
+  evidenceStatusMessage,
+  gatherWebsiteEvidence,
+  type WebsiteEvidence,
+} from "@/lib/website-scraper";
 import {
   getLocalDesignFilePath,
   readWebsiteReverse,
@@ -36,35 +40,66 @@ function encodeSse(event: string, data: unknown): string {
 
 function buildDesignUserMessage(opts: {
   targetUrl: string;
-  title: string | null;
-  branding: unknown;
-  markdown: string;
+  evidence: WebsiteEvidence;
 }): string {
-  return [
+  const lines: string[] = [
     `# Target website`,
     ``,
     `URL: ${opts.targetUrl}`,
-    opts.title ? `Title: ${opts.title}` : "",
+    opts.evidence.title ? `Title: ${opts.evidence.title}` : "",
     ``,
-    `## Firecrawl branding JSON`,
+    `Evidence source: ${opts.evidence.source}`,
     ``,
-    "```json",
-    JSON.stringify(opts.branding, null, 2),
-    "```",
-    ``,
-    `## Page markdown`,
-    ``,
-    opts.markdown || "*(empty)*",
-  ]
+  ];
+
+  if (opts.evidence.source === "firecrawl" && opts.evidence.branding) {
+    lines.push(
+      `## Firecrawl branding JSON`,
+      ``,
+      "```json",
+      JSON.stringify(opts.evidence.branding, null, 2),
+      "```",
+      ``
+    );
+  }
+
+  if (opts.evidence.source === "context-dev") {
+    if (opts.evidence.styleguide) {
+      lines.push(
+        `## Context.dev styleguide JSON`,
+        ``,
+        "```json",
+        JSON.stringify(opts.evidence.styleguide, null, 2),
+        "```",
+        ``
+      );
+    }
+    if (opts.evidence.brand) {
+      lines.push(
+        `## Context.dev brand JSON`,
+        ``,
+        "```json",
+        JSON.stringify(opts.evidence.brand, null, 2),
+        "```",
+        ``
+      );
+    }
+  }
+
+  if (opts.evidence.screenshotUrl) {
+    lines.push(`## Screenshot URL`, ``, opts.evidence.screenshotUrl, ``);
+  }
+
+  lines.push(`## Page markdown`, ``, opts.evidence.markdown || "*(empty)*");
+
+  return lines
     .filter((line, i, arr) => !(line === "" && arr[i - 1] === ""))
     .join("\n");
 }
 
 function buildReversePromptUserMessage(opts: {
   targetUrl: string;
-  title: string | null;
-  branding: unknown;
-  markdown: string;
+  evidence: WebsiteEvidence;
   designMd: string;
 }): string {
   const designSummary =
@@ -72,26 +107,41 @@ function buildReversePromptUserMessage(opts: {
       ? `${opts.designMd.slice(0, 2500)}\n\n… (design.md truncated)`
       : opts.designMd;
 
+  const tokenPayload =
+    opts.evidence.source === "firecrawl"
+      ? opts.evidence.branding
+      : {
+          styleguide: opts.evidence.styleguide,
+          brand: opts.evidence.brand,
+        };
+
   return [
     `# Target website`,
     ``,
     `URL: ${opts.targetUrl}`,
-    opts.title ? `Title: ${opts.title}` : "",
+    opts.evidence.title ? `Title: ${opts.evidence.title}` : "",
     ``,
-    `## Branding JSON`,
+    `Evidence source: ${opts.evidence.source}`,
+    ``,
+    `## Design tokens JSON`,
     ``,
     "```json",
-    JSON.stringify(opts.branding, null, 2),
+    JSON.stringify(tokenPayload, null, 2),
     "```",
     ``,
+    opts.evidence.screenshotUrl
+      ? `Screenshot URL: ${opts.evidence.screenshotUrl}\n`
+      : "",
     `## Page markdown excerpt`,
     ``,
-    opts.markdown.slice(0, 4000) || "*(empty)*",
+    opts.evidence.markdown.slice(0, 4000) || "*(empty)*",
     ``,
     `## Design system summary`,
     ``,
     designSummary,
-  ].join("\n");
+  ]
+    .filter((line, i, arr) => !(line === "" && arr[i - 1] === ""))
+    .join("\n");
 }
 
 async function runWebsiteReverse(opts: {
@@ -121,9 +171,10 @@ async function runWebsiteReverse(opts: {
   }
 
   onStatus?.("Fetching brand identity");
-  let scrape;
+  let evidence: WebsiteEvidence;
   try {
-    scrape = await scrapeWebsite(targetUrl);
+    evidence = await gatherWebsiteEvidence(targetUrl);
+    onStatus?.(evidenceStatusMessage(evidence.source));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg, status: 502 };
@@ -135,9 +186,7 @@ async function runWebsiteReverse(opts: {
     buildWebsiteDesignSystemPrompt(),
     buildDesignUserMessage({
       targetUrl,
-      title: scrape.title,
-      branding: scrape.branding ?? {},
-      markdown: scrape.markdown,
+      evidence,
     }),
     12_000
   );
@@ -151,9 +200,7 @@ async function runWebsiteReverse(opts: {
     WEBSITE_REVERSE_SYSTEM_PROMPT,
     buildReversePromptUserMessage({
       targetUrl,
-      title: scrape.title,
-      branding: scrape.branding ?? {},
-      markdown: scrape.markdown,
+      evidence,
       designMd: designResult.text,
     }),
     4096
