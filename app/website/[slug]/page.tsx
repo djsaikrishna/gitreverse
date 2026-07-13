@@ -5,6 +5,7 @@ import {
   parseWebsiteInput,
   urlToSlug,
 } from "@/lib/parse-website-input";
+import { designApiPath } from "@/lib/website-reverse-storage";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -32,13 +33,11 @@ export default async function WebsiteSlugPage({
     notFound();
   }
 
-  const designPath = `/api/website-design/${encodeURIComponent(slug)}`;
-
   return (
     <WebsiteReversePage
       siteSlug={slug}
       targetUrl={parsed.url}
-      designPath={designPath}
+      designPath={designApiPath(slug)}
     />
   );
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidWebsiteSlug, parseWebsiteInput } from "@/lib/parse-website-input";
 import { callQuickLlm, resolveLlmTarget } from "@/lib/quick-llm";
+import { websiteDesignApiUrl } from "@/lib/site-url";
 import { buildWebsiteDesignSystemPrompt } from "@/lib/website-design-system-prompt";
 import { WEBSITE_REVERSE_SYSTEM_PROMPT } from "@/lib/website-reverse-system-prompt";
 import {
@@ -9,7 +10,7 @@ import {
   type WebsiteEvidence,
 } from "@/lib/website-scraper";
 import {
-  getLocalDesignFilePath,
+  designApiPath,
   readWebsiteReverse,
   writeWebsiteReverse,
 } from "@/lib/website-reverse-storage";
@@ -25,17 +26,19 @@ type WebsiteReverseResult =
       ok: true;
       prompt: string;
       designPath: string;
-      localDesignPath: string;
       fromCache: boolean;
     }
   | { ok: false; error: string; status: number };
 
-function designApiPath(slug: string): string {
-  return `/api/website-design/${encodeURIComponent(slug)}`;
-}
-
 function encodeSse(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function appendDesignSystemLink(prompt: string, slug: string): string {
+  const link = websiteDesignApiUrl(slug);
+  const suffix = `Use this design system for the visuals: ${link}`;
+  if (prompt.includes(suffix)) return prompt;
+  return `${prompt.trimEnd()}\n\n${suffix}`;
 }
 
 function buildDesignUserMessage(opts: {
@@ -159,7 +162,6 @@ async function runWebsiteReverse(opts: {
         ok: true,
         prompt: cached.meta.prompt,
         designPath: designApiPath(slug),
-        localDesignPath: getLocalDesignFilePath(slug),
         fromCache: true,
       };
     }
@@ -170,7 +172,7 @@ async function runWebsiteReverse(opts: {
     return { ok: false, error: llm.error, status: 500 };
   }
 
-  onStatus?.("Fetching brand identity");
+  onStatus?.("Visiting site");
   let evidence: WebsiteEvidence;
   try {
     evidence = await gatherWebsiteEvidence(targetUrl);
@@ -180,6 +182,7 @@ async function runWebsiteReverse(opts: {
     return { ok: false, error: msg, status: 502 };
   }
 
+  onStatus?.("Understanding design");
   onStatus?.("Writing design.md");
   const designResult = await callQuickLlm(
     llm,
@@ -194,7 +197,7 @@ async function runWebsiteReverse(opts: {
     return { ok: false, error: designResult.error, status: designResult.status };
   }
 
-  onStatus?.("Building reverse prompt");
+  onStatus?.("Reverse engineering prompt");
   const promptResult = await callQuickLlm(
     llm,
     WEBSITE_REVERSE_SYSTEM_PROMPT,
@@ -209,27 +212,28 @@ async function runWebsiteReverse(opts: {
     return { ok: false, error: promptResult.error, status: promptResult.status };
   }
 
+  const finalPrompt = appendDesignSystemLink(promptResult.text, slug);
+
   try {
     await writeWebsiteReverse({
       slug,
       targetUrl,
       designMd: designResult.text,
-      prompt: promptResult.text,
+      prompt: finalPrompt,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
-      error: `Failed to write local output: ${msg}`,
+      error: `Failed to save cache: ${msg}`,
       status: 500,
     };
   }
 
   return {
     ok: true,
-    prompt: promptResult.text,
+    prompt: finalPrompt,
     designPath: designApiPath(slug),
-    localDesignPath: getLocalDesignFilePath(slug),
     fromCache: false,
   };
 }
@@ -252,7 +256,6 @@ async function executeWebsiteReverse(opts: {
       return NextResponse.json({
         prompt: result.prompt,
         designPath: result.designPath,
-        localDesignPath: result.localDesignPath,
         fromCache: result.fromCache,
       });
     }
@@ -267,7 +270,6 @@ async function executeWebsiteReverse(opts: {
       return NextResponse.json({
         prompt: result.prompt,
         designPath: result.designPath,
-        localDesignPath: result.localDesignPath,
         fromCache: result.fromCache,
       });
     } finally {
@@ -299,7 +301,6 @@ async function executeWebsiteReverse(opts: {
         send("done", {
           prompt: result.prompt,
           designPath: result.designPath,
-          localDesignPath: result.localDesignPath,
           fromCache: result.fromCache,
         });
       } catch (e) {
