@@ -6,6 +6,7 @@ import { Navbar } from "@/components/navbar";
 import { PromptMarkdown } from "@/components/prompt-markdown";
 import { WebsiteDesignFlavorText } from "@/components/website-design-flavor-text";
 import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
+import { useAppHref } from "@/lib/use-app-href";
 
 type WebsiteReversePageProps = {
   siteSlug: string;
@@ -27,6 +28,7 @@ export function WebsiteReversePage({
   designPath,
 }: WebsiteReversePageProps) {
   const router = useRouter();
+  const codebaseHomeHref = useAppHref("/");
 
   const [currentSlug, setCurrentSlug] = useState(siteSlug);
   const [currentTargetUrl, setCurrentTargetUrl] = useState(targetUrl);
@@ -331,7 +333,7 @@ export function WebsiteReversePage({
               <p className="mt-4 text-center text-sm text-zinc-600">
                 Want the engineering side?{" "}
                 <a
-                  href="/"
+                  href={codebaseHomeHref}
                   className="font-bold text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:decoration-zinc-900"
                 >
                   Try codebase reversing

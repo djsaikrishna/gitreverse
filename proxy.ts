@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseWebsiteReverseHost } from "@/lib/parse-website-reverse-host";
+import { getApexHost } from "@/lib/site-url";
 
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";
@@ -20,6 +21,13 @@ export function proxy(request: NextRequest) {
 
   const parsed = parseWebsiteReverseHost(host);
   if (!parsed) return NextResponse.next();
+
+  // Non-root paths on a website-reverse subdomain belong on the apex app.
+  if (request.nextUrl.pathname !== "/") {
+    const apexUrl = request.nextUrl.clone();
+    apexUrl.host = getApexHost(host);
+    return NextResponse.redirect(apexUrl, 307);
+  }
 
   const url = request.nextUrl.clone();
   url.pathname = `/website/${encodeURIComponent(parsed.slug)}`;
