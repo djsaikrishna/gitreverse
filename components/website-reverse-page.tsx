@@ -328,6 +328,15 @@ export function WebsiteReversePage({
               <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
                 <PromptMarkdown>{prompt}</PromptMarkdown>
               </div>
+              <p className="mt-4 text-center text-sm text-zinc-600">
+                Want the engineering side?{" "}
+                <a
+                  href="/"
+                  className="font-bold text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:decoration-zinc-900"
+                >
+                  Try codebase reversing
+                </a>
+              </p>
             </section>
           </div>
         ) : null}

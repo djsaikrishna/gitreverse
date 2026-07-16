@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>01 · Segmented switch — GitReverse design</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="wordmark" href="./index.html">Git<span class="rev">Reverse</span></a>
+      <div class="nav-links">
+        <a href="#">Library</a>
+        <a href="#">Premium</a>
+      </div>
+    </header>
+
+    <main class="main">
+      <a class="back" href="./index.html">← All variations</a>
+
+      <div class="hero">
+        <span class="badge">Var 01 · Recommended</span>
+        <h1 id="headline">Codebase to<br />prompt</h1>
+        <p id="sub">
+          Reverse engineer a GitHub repo into a prompt you can build from.
+        </p>
+      </div>
+
+      <div
+        class="switch"
+        role="tablist"
+        aria-label="Reverse mode"
+      >
+        <button type="button" id="mode-code" aria-pressed="true">Codebase</button>
+        <button type="button" id="mode-web" aria-pressed="false">Website</button>
+      </div>
+
+      <div class="card-wrap">
+        <div class="shadow"></div>
+        <form class="card" id="form" onsubmit="return false">
+          <div class="row">
+            <div class="field">
+              <div class="shadow"></div>
+              <input
+                id="input"
+                type="text"
+                autocomplete="off"
+                placeholder="https://github.com/…"
+                value=""
+              />
+            </div>
+            <div class="cta">
+              <div class="shadow"></div>
+              <button type="submit" id="submit">Get Prompt</button>
+            </div>
+          </div>
+
+          <div class="examples" id="examples"></div>
+        </form>
+      </div>
+
+      <p class="cross" id="cross"></p>
+    </main>
+
+    <aside class="anno">
+      <strong>Decluttered</strong>
+      No Manual control. No Deep Reverse. Mode switch + cross-sell only.
+    </aside>
+
+    <script>
+      const REPOS = [
+        { label: "Next.js", url: "https://github.com/vercel/next.js" },
+        { label: "React", url: "https://github.com/facebook/react" },
+        { label: "Supabase", url: "https://github.com/supabase/supabase" },
+        { label: "Linux", url: "https://github.com/torvalds/linux" },
+      ];
+      const SITES = [
+        { label: "YouTube", url: "https://youtube.com" },
+        { label: "Pinterest", url: "https://pinterest.com" },
+        { label: "Xbox", url: "https://xbox.com" },
+        { label: "Apple", url: "https://apple.com" },
+        { label: "Discord", url: "https://discord.com" },
+      ];
+
+      let mode = "code";
+
+      const headline = document.getElementById("headline");
+      const sub = document.getElementById("sub");
+      const input = document.getElementById("input");
+      const examples = document.getElementById("examples");
+      const cross = document.getElementById("cross");
+      const btnCode = document.getElementById("mode-code");
+      const btnWeb = document.getElementById("mode-web");
+
+      function render() {
+        const isCode = mode === "code";
+        btnCode.setAttribute("aria-pressed", String(isCode));
+        btnWeb.setAttribute("aria-pressed", String(!isCode));
+
+        headline.innerHTML = isCode
+          ? "Codebase to<br />prompt"
+          : "Website to<br />prompt";
+        sub.textContent = isCode
+          ? "Reverse engineer a GitHub repo into a prompt you can build from."
+          : "Reverse engineer any site into a design prompt you can rebuild from.";
+        input.placeholder = isCode ? "https://github.com/…" : "https://…";
+        input.value = "";
+
+        const list = isCode ? REPOS : SITES;
+        const label = isCode ? "Try example repos:" : "Try example websites:";
+        examples.innerHTML =
+          `<span class="label">${label}</span>` +
+          list
+            .map(
+              (ex) =>
+                `<div class="chip"><div class="shadow"></div><button type="button" data-url="${ex.url}">${ex.label}</button></div>`
+            )
+            .join("");
+
+        cross.innerHTML = isCode
+          ? `Have a live site instead? <button type="button" class="linkish" data-switch="web">Try website reverse</button>`
+          : `Have a GitHub repo? <button type="button" class="linkish" data-switch="code">Try codebase reversing</button>`;
+      }
+
+      btnCode.addEventListener("click", () => {
+        mode = "code";
+        render();
+      });
+      btnWeb.addEventListener("click", () => {
+        mode = "web";
+        render();
+      });
+
+      examples.addEventListener("click", (e) => {
+        const t = e.target.closest("button[data-url]");
+        if (!t) return;
+        input.value = t.dataset.url;
+        input.focus();
+      });
+
+      cross.addEventListener("click", (e) => {
+        const t = e.target.closest("[data-switch]");
+        if (!t) return;
+        mode = t.dataset.switch;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>

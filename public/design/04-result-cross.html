@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>04 · Result cross-prompt — GitReverse design</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="wordmark" href="./index.html">Git<span class="rev">Reverse</span></a>
+      <div class="nav-links">
+        <a href="#">Library</a>
+        <a href="#">Premium</a>
+      </div>
+    </header>
+
+    <main class="main">
+      <a class="back" href="./index.html">← All variations</a>
+
+      <div class="hero" style="margin-bottom: 0">
+        <span class="badge">Var 04 · After result</span>
+        <p style="margin: 0; font-size: 0.95rem; color: #71717a">
+          Toggle which result you’re looking at — same cross-sell idea.
+        </p>
+      </div>
+
+      <div
+        class="switch"
+        role="tablist"
+        aria-label="Demo result type"
+        style="margin-bottom: 0.25rem"
+      >
+        <button type="button" id="mode-code" aria-pressed="true">
+          Codebase result
+        </button>
+        <button type="button" id="mode-web" aria-pressed="false">
+          Website result
+        </button>
+      </div>
+
+      <!-- Mini form context -->
+      <div class="card-wrap">
+        <div class="shadow"></div>
+        <div class="card">
+          <div class="row">
+            <div class="field">
+              <div class="shadow"></div>
+              <input id="input" type="text" readonly />
+            </div>
+            <div class="cta">
+              <div class="shadow"></div>
+              <button type="button" disabled style="opacity: 0.85">
+                Get Prompt
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-wrap">
+        <div class="shadow"></div>
+        <section class="result">
+          <div class="result-head">
+            <h2 id="result-title">Reverse engineered prompt</h2>
+            <div class="result-actions">
+              <div class="btn-sm">
+                <div class="shadow"></div>
+                <span id="secondary-cta">Design this</span>
+              </div>
+              <div class="btn-sm copy">
+                <div class="shadow"></div>
+                <button type="button">Copy</button>
+              </div>
+            </div>
+          </div>
+          <div class="prompt-body" id="prompt-body"></div>
+          <p class="footer-cross" id="footer-cross"></p>
+        </section>
+      </div>
+    </main>
+
+    <aside class="anno">
+      <strong>Replaces Deep Reverse</strong>
+      Post-result CTA becomes a mode hop, not a depth upsell.
+    </aside>
+
+    <script>
+      const CODE = {
+        input: "https://github.com/vercel/next.js",
+        secondary: "Design this",
+        body: `
+          <h3>Next.js — reverse-engineered build prompt</h3>
+          <p>Build a React framework for production apps with file-based routing, server components, and incremental static regeneration.</p>
+          <ul>
+            <li>App Router with nested layouts</li>
+            <li>Server / client component boundary</li>
+            <li>Streaming and Suspense-first data fetching</li>
+          </ul>
+        `,
+        cross: `Done with the repo? <button type="button" class="linkish" data-switch="web">Try website reverse</button> on a live product UI.`,
+      };
+
+      const WEB = {
+        input: "https://pinterest.com",
+        secondary: "Open design system",
+        body: `
+          <h3>Pinterest — reverse-engineered design prompt</h3>
+          <p>Build a visual discovery feed: masonry grid, soft neutrals, red accent CTAs, and save-to-board interactions.</p>
+          <ul>
+            <li>Infinite masonry of image cards</li>
+            <li>Hover overlays for Save / Share</li>
+            <li>Warm cream surfaces, bold sans display type</li>
+          </ul>
+        `,
+        cross: `Want the engineering side? <button type="button" class="linkish" data-switch="code">Try codebase reversing</button> on a related open-source repo.`,
+      };
+
+      let mode = "code";
+      const btnCode = document.getElementById("mode-code");
+      const btnWeb = document.getElementById("mode-web");
+      const input = document.getElementById("input");
+      const secondary = document.getElementById("secondary-cta");
+      const body = document.getElementById("prompt-body");
+      const footer = document.getElementById("footer-cross");
+
+      function render() {
+        const isCode = mode === "code";
+        const data = isCode ? CODE : WEB;
+        btnCode.setAttribute("aria-pressed", String(isCode));
+        btnWeb.setAttribute("aria-pressed", String(!isCode));
+        input.value = data.input;
+        secondary.textContent = data.secondary;
+        body.innerHTML = data.body;
+        footer.innerHTML = data.cross;
+      }
+
+      btnCode.addEventListener("click", () => {
+        mode = "code";
+        render();
+      });
+      btnWeb.addEventListener("click", () => {
+        mode = "web";
+        render();
+      });
+      footer.addEventListener("click", (e) => {
+        const t = e.target.closest("[data-switch]");
+        if (t) {
+          mode = t.dataset.switch;
+          render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>
