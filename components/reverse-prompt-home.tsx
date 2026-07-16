@@ -752,7 +752,17 @@ export function ReversePromptHome({
     if (loading) return;
 
     if (isHome && homeMode === "website") {
-      const parsed = parseWebsiteInput(siteUrl.trim());
+      const siteRaw = siteUrl.trim();
+      const isGitHubUrl = /^(https?:\/\/)?(www\.)?github\.com\/.+\/.+/i.test(siteRaw) ||
+        /^github\.com\/.+\/.+/.test(siteRaw) ||
+        (/^[^/\s]+\/[^/\s]+$/.test(siteRaw) && !siteRaw.includes("."));
+      if (isGitHubUrl) {
+        setError(
+          "That looks like a GitHub repo. Switch to Codebase mode to reverse-engineer code."
+        );
+        return;
+      }
+      const parsed = parseWebsiteInput(siteRaw);
       if (!parsed) {
         setError(
           "Could not parse website URL. Use https://example.com or example.com."
@@ -769,6 +779,18 @@ export function ReversePromptHome({
     const trimmed = repoUrl.trim();
 
     if (!initialRepoInput?.trim()) {
+      const isNonGitHubWebUrl = /^https?:\/\//i.test(trimmed) && (() => {
+        try {
+          const h = new URL(trimmed).hostname.replace(/^www\./, "");
+          return h !== "github.com";
+        } catch { return false; }
+      })();
+      if (isNonGitHubWebUrl) {
+        setError(
+          "That looks like a website URL. Switch to Website mode to reverse-engineer sites."
+        );
+        return;
+      }
       const parsed = parseGitHubRepoInput(trimmed);
       if (!parsed) {
         setError("Could not parse GitHub repo. Use owner/repo or a github.com URL.");
