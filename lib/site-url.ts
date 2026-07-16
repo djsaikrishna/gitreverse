@@ -35,17 +35,15 @@ export function getApexHost(host: string): string {
   }
 }
 
-/** Absolute URL on the main GitReverse site. */
-export function mainSiteHref(path: string): string {
-  return `${getSiteBaseUrl()}${normalizePath(path)}`;
-}
-
 /**
  * App navigation href: relative on the apex domain, absolute on website-reverse subdomains.
+ * Derives the apex URL from the hostname itself — no env vars needed.
  */
 export function appHref(host: string, path: string): string {
-  if (parseWebsiteReverseHost(host)) {
-    return mainSiteHref(path);
+  if (!parseWebsiteReverseHost(host)) {
+    return normalizePath(path);
   }
-  return normalizePath(path);
+  const apexHost = getApexHost(host);
+  const scheme = apexHost.startsWith("localhost") ? "http" : "https";
+  return `${scheme}://${apexHost}${normalizePath(path)}`;
 }
