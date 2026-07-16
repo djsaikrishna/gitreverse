@@ -4,20 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
-
-
-type PromptEntry = {
-  id: number;
-  owner: string;
-  repo: string;
-  prompt: string;
-  cached_at: string;
-  views?: number;
-  title?: string | null;
-  relevance_score?: number;
-};
-
-type SortOption = "trending" | "newest" | "oldest";
+import type { LibraryEntry, SortOption } from "@/lib/library-types";
 
 const SORT_OPTIONS: SortOption[] = ["newest", "trending", "oldest"];
 
@@ -44,14 +31,14 @@ function relativeTime(iso: string): string {
 }
 
 type LibraryPageProps = {
-  initialData: PromptEntry[];
+  initialData: LibraryEntry[];
   initialTotal: number;
 };
 
 export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
-  const [entries, setEntries] = useState<PromptEntry[]>(initialData);
+  const [entries, setEntries] = useState<LibraryEntry[]>(initialData);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(0);
   const [isPending, startTransition] = useTransition();
@@ -78,7 +65,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
       });
       if (!res.ok) return;
       const json = (await res.json()) as {
-        data: PromptEntry[];
+        data: LibraryEntry[];
         total: number;
       };
       if (append) {
@@ -109,8 +96,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
     };
   }, [search, sort, fetchPage]);
 
-  // Re-sync after mount so view counts (and other fields) are not stale from
-  // RSC/router cache when returning from a repo page.
+  // Re-sync after mount so library data is not stale from RSC/router cache.
   useEffect(() => {
     startTransition(() => {
       void fetchPage("", "newest", 0, false).then(() => {
@@ -146,7 +132,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
             Prompt Library
           </h1>
           <p className="max-w-lg text-lg text-zinc-600">
-            Reverse-engineered prompts from real GitHub repositories.
+            Reverse-engineered prompts from GitHub repositories and live websites.
           </p>
         </div>
 
@@ -267,7 +253,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {entries.map((entry) => (
-              <PromptCard key={entry.id} entry={entry} />
+              <LibraryCard key={entry.key} entry={entry} />
             ))}
           </div>
         )}
@@ -369,9 +355,7 @@ function SkeletonGrid() {
   );
 }
 
-function PromptCard({ entry }: { entry: PromptEntry }) {
-  const href = `/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repo)}`;
-  const displayTitle = entry.title?.trim() || entry.repo;
+function LibraryCard({ entry }: { entry: LibraryEntry }) {
   const truncated =
     entry.prompt.length > 160
       ? entry.prompt.slice(0, 160).trimEnd() + "…"
@@ -379,49 +363,77 @@ function PromptCard({ entry }: { entry: PromptEntry }) {
 
   return (
     <Link
-      href={href}
+      href={entry.href}
       target="_blank"
       rel="noopener noreferrer"
       className="group relative block cursor-pointer"
-      aria-label={displayTitle}
+      aria-label={entry.title}
     >
       <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-xl bg-zinc-900 transition-transform group-hover:translate-x-2 group-hover:translate-y-2" />
       <div className="relative z-10 flex h-full flex-col gap-3 rounded-xl border-[3px] border-zinc-900 bg-white p-4 transition-transform group-hover:-translate-x-0.5 group-hover:-translate-y-0.5">
-        {/* Header */}
         <h3 className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
-          {displayTitle}
+          {entry.title}
         </h3>
 
-        {/* Prompt preview */}
         <p className="flex-1 text-sm leading-relaxed text-zinc-600">{truncated}</p>
 
-        {/* Footer */}
         <div className="flex items-center justify-between gap-2">
           <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
             {relativeTime(entry.cached_at)}
           </span>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
-              <svg
-                className="h-3.5 w-3.5 shrink-0 text-zinc-400"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {(entry.views ?? 0).toLocaleString()}{" "}
-              {(entry.views ?? 0) === 1 ? "view" : "views"}
-            </span>
-          </div>
+          <KindBadge kind={entry.kind} />
         </div>
       </div>
     </Link>
+  );
+}
+
+function KindBadge({ kind }: { kind: LibraryEntry["kind"] }) {
+  if (kind === "website") {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center gap-1 rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800"
+        title="Website reverse"
+      >
+        <svg
+          className="h-3.5 w-3.5 shrink-0"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-2.247m0 0A8.966 8.966 0 013 12c0-1.264.26-2.47.732-3.553"
+          />
+        </svg>
+        Website
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700"
+      title="Codebase reverse"
+    >
+      <svg
+        className="h-3.5 w-3.5 shrink-0"
+        viewBox="0 0 98 96"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden
+      >
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.096-.08-9.211-13.588 2.963-16.424-5.867-16.424-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.613-10.839-1.22-22.229-5.412-22.229-24.054 0-5.312 1.895-9.718 5.424-13.126-.526-1.324-2.356-6.74.505-14.052 0 0 4.432-1.505 14.5 5.008 4.172-1.095 8.73-1.63 13.168-1.656 4.469.026 8.971.561 13.166 1.656 10.06-6.513 14.48-5.008 14.48-5.008 2.866 7.326 1.052 12.728.53 14.052 3.532 3.408 5.414 7.814 5.414 13.126 0 18.728-11.401 22.813-22.285 23.985 1.772 1.514 3.316 4.539 3.316 9.119 0 6.613-.08 11.898-.08 13.526 0 1.304.878 2.853 3.316 2.364C84.974 89.385 98 70.983 98 49.204 98 22 76.038 0 48.854 0z"
+          fill="currentColor"
+        />
+      </svg>
+      Code
+    </span>
   );
 }

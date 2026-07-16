@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { fetchInitialLibrary } from "@/lib/library-query";
 import { getSupabase } from "@/lib/supabase";
 import { LibraryPage } from "@/components/library-page";
 import { JsonLd } from "@/components/json-ld";
@@ -9,19 +10,19 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Prompt Library",
   description:
-    "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
+    "Browse reverse-engineered prompts from GitHub repositories and live websites. Find coding agent prompts for open-source projects and product UIs.",
   alternates: { canonical: "https://gitreverse.com/library" },
   openGraph: {
     title: "Prompt Library",
     description:
-      "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
+      "Browse reverse-engineered prompts from GitHub repositories and live websites. Find coding agent prompts for open-source projects and product UIs.",
     url: "https://gitreverse.com/library",
     type: "website",
   },
   twitter: {
     title: "Prompt Library",
     description:
-      "Browse 1,000+ reverse-engineered prompts from real GitHub repositories. Find coding agent prompts for any open-source project.",
+      "Browse reverse-engineered prompts from GitHub repositories and live websites. Find coding agent prompts for open-source projects and product UIs.",
   },
 };
 
@@ -31,26 +32,13 @@ export default async function LibraryRoute() {
   await connection();
   const supabase = getSupabase();
 
-  let initialData: {
-    id: number;
-    owner: string;
-    repo: string;
-    prompt: string;
-    cached_at: string;
-    views?: number;
-    title?: string | null;
-  }[] = [];
+  let initialData: Awaited<ReturnType<typeof fetchInitialLibrary>>["data"] = [];
   let initialTotal = 0;
 
   if (supabase) {
-    const { data, count } = await supabase
-      .from("prompt_cache")
-      .select("id, owner, repo, prompt, cached_at, views, title", { count: "exact" })
-      .order("cached_at", { ascending: false })
-      .range(0, INITIAL_LIMIT - 1);
-
-    initialData = (data ?? []) as typeof initialData;
-    initialTotal = count ?? 0;
+    const result = await fetchInitialLibrary(supabase, INITIAL_LIMIT);
+    initialData = result.data;
+    initialTotal = result.total;
   }
 
   const collectionJsonLd = {
@@ -58,13 +46,13 @@ export default async function LibraryRoute() {
     "@type": "CollectionPage",
     name: "Prompt Library — GitReverse",
     description:
-      "Browse reverse-engineered coding agent prompts from real GitHub repositories.",
+      "Browse reverse-engineered coding agent prompts from GitHub repositories and live websites.",
     url: "https://gitreverse.com/library",
     numberOfItems: initialTotal,
     hasPart: initialData.slice(0, 10).map((entry) => ({
       "@type": "TechArticle",
-      name: entry.title?.trim() || `${entry.owner}/${entry.repo}`,
-      url: `https://gitreverse.com/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repo)}`,
+      name: entry.title,
+      url: `https://gitreverse.com${entry.href}`,
     })),
   };
 
