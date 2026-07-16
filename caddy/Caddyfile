@@ -2,7 +2,7 @@
 	# On-demand TLS: ask our app before issuing a cert for any hostname.
 	# This prevents rate-limit abuse from arbitrary domains pointing here.
 	on_demand_tls {
-		ask https://gitreverse.com/api/tls-check?domain={host}
+		ask https://gitreverse.vercel.app/api/tls-check
 	}
 
 	email franknick285@gmail.com

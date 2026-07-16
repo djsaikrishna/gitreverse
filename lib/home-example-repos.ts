@@ -9,6 +9,15 @@ export const HOME_EXAMPLES = [
   { label: "Linux", url: "https://github.com/torvalds/linux" },
 ] as const;
 
+/** Hero “Try example websites” for home Website mode. */
+export const HOME_WEBSITE_EXAMPLES = [
+  { label: "YouTube", url: "https://youtube.com" },
+  { label: "Pinterest", url: "https://pinterest.com" },
+  { label: "Xbox", url: "https://xbox.com" },
+  { label: "Apple", url: "https://apple.com" },
+  { label: "Discord", url: "https://discord.com" },
+] as const;
+
 const EXAMPLE_OWNER_REPO_KEYS = new Set(
   HOME_EXAMPLES.map((ex) => {
     const p = parseGitHubRepoInput(ex.url);

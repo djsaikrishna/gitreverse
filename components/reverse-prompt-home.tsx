@@ -10,8 +10,12 @@ import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
 import { useAuth } from "@/contexts/AuthContext";
-import { HOME_EXAMPLES } from "@/lib/home-example-repos";
+import {
+  HOME_EXAMPLES,
+  HOME_WEBSITE_EXAMPLES,
+} from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
+import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
 import { beginCreditCheckout, saveReturnPath } from "@/lib/stripe-checkout-navigate";
 import {
   buildDefaultBillingStatus,
@@ -151,6 +155,8 @@ export function ReversePromptHome({
       ? ""
       : (autoSubmitFocus?.trim() || initialManualFocus?.trim()) ?? "";
   const [repoUrl, setRepoUrl] = useState(initialRepoInput);
+  const [siteUrl, setSiteUrl] = useState("");
+  const [homeMode, setHomeMode] = useState<"codebase" | "website">("codebase");
   const [customReverse, setCustomReverse] = useState(Boolean(initialFocus));
   const [customPrompt, setCustomPrompt] = useState(initialFocus);
   /** Hides “Deep Reverse” after a custom or deep run (not needed for that result). */
@@ -223,6 +229,15 @@ export function ReversePromptHome({
       setBillingStatus(buildDefaultBillingStatus());
     }
   }, [session?.access_token]);
+
+  /** Home: honor `?mode=website` for shareable website-reverse entry. */
+  useEffect(() => {
+    if (!isHome || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode")?.trim().toLowerCase() === "website") {
+      setHomeMode("website");
+    }
+  }, [isHome]);
 
   /** Open Manual control and fill the focus when the URL (or SSR) carries a manual focus segment. */
   useEffect(() => {
@@ -678,39 +693,6 @@ export function ReversePromptHome({
     ]
   );
 
-  const startDeepReverse = useCallback(() => {
-    if (loading) return;
-    const input = repoUrl.trim();
-    const parsed = parseGitHubRepoInput(input);
-    if (!parsed) return;
-    setPremiumUpsellFeature(null);
-    if (!isAuthenticated) {
-      openAuthModalWithPending({ type: "deep", repoUrl: input });
-      return;
-    }
-    if (!canUseDeep) {
-      openPremiumUpsell("deep");
-      return;
-    }
-    if (!initialRepoInput?.trim()) {
-      void router.push(
-        `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/deep`
-      );
-    } else {
-      void runCustomReverse(input, { mode: "deep" });
-    }
-  }, [
-    isAuthenticated,
-    openAuthModalWithPending,
-    openPremiumUpsell,
-    loading,
-    repoUrl,
-    canUseDeep,
-    initialRepoInput,
-    router,
-    runCustomReverse,
-  ]);
-
   /** Resume Deep / Manual after GitHub popup sign-in (sessionStorage). */
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -751,14 +733,47 @@ export function ReversePromptHome({
     runCustomReverse,
   ]);
 
+  function setHomeModeAndUrl(next: "codebase" | "website") {
+    setHomeMode(next);
+    setError(null);
+    setCustomReverse(false);
+    if (typeof window === "undefined" || !isHome) return;
+    const url = new URL(window.location.href);
+    if (next === "website") {
+      url.searchParams.set("mode", "website");
+    } else {
+      url.searchParams.delete("mode");
+    }
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
+
+    if (isHome && homeMode === "website") {
+      const parsed = parseWebsiteInput(siteUrl.trim());
+      if (!parsed) {
+        setError(
+          "Could not parse website URL. Use https://example.com or example.com."
+        );
+        return;
+      }
+      const slug = urlToSlug(parsed.hostname);
+      void router.push(
+        `/website/${encodeURIComponent(slug)}?url=${encodeURIComponent(parsed.url)}`
+      );
+      return;
+    }
+
     const trimmed = repoUrl.trim();
 
     if (!initialRepoInput?.trim()) {
       const parsed = parseGitHubRepoInput(trimmed);
-      if (!parsed) return;
+      if (!parsed) {
+        setError("Could not parse GitHub repo. Use owner/repo or a github.com URL.");
+        return;
+      }
       if (customReverse) {
         const focus = customPrompt.trim();
         if (!isAuthenticated) {
@@ -1160,19 +1175,56 @@ export function ReversePromptHome({
         <div className="flex w-full flex-col items-center gap-6">
           {isHome ? (
             <div className="relative flex w-full flex-col items-center text-center">
-
               <h1 className="text-5xl font-extrabold tracking-tighter sm:text-6xl lg:text-7xl">
-                Repository to
+                Reverse into
                 <br />
-                prompt
+                a prompt
               </h1>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Reverse engineer a codebase into a prompt you can build from.
+                Reverse engineer any codebase or website into a prompt.
               </p>
             </div>
-          ) : (owner && repo) ? (
+          ) : owner && repo ? (
             <h1 className="sr-only">{`${owner}/${repo} — reverse-engineered prompt`}</h1>
           ) : null}
+
+          {isHome ? (
+            <div
+              className="inline-flex overflow-hidden rounded-[10px] border-[3px] border-zinc-900 bg-white"
+              role="tablist"
+              aria-label="Reverse mode"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={homeMode === "codebase"}
+                aria-pressed={homeMode === "codebase"}
+                onClick={() => setHomeModeAndUrl("codebase")}
+                className={`border-r-[2.5px] border-zinc-900 px-5 py-2.5 text-sm font-bold transition-colors ${
+                  homeMode === "codebase"
+                    ? "bg-[#d31611] text-white"
+                    : "bg-transparent text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                Codebase
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={homeMode === "website"}
+                aria-pressed={homeMode === "website"}
+                onClick={() => setHomeModeAndUrl("website")}
+                className={`px-5 py-2.5 text-sm font-bold transition-colors ${
+                  homeMode === "website"
+                    ? "bg-[#d31611] text-white"
+                    : "bg-transparent text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                Website
+              </button>
+            </div>
+          ) : null}
+
           <div className="flex w-full max-w-2xl flex-col gap-3">
           <div className="relative w-full">
             <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900" />
@@ -1184,15 +1236,27 @@ export function ReversePromptHome({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
                   <div className="relative min-w-0 flex-1">
                     <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-900" />
-                    <input
-                      name="repoUrl"
-                      autoComplete="off"
-                      className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
-                      placeholder="https://github.com/…"
-                      value={repoUrl}
-                      onChange={(e) => setRepoUrl(e.target.value)}
-                      required
-                    />
+                    {isHome && homeMode === "website" ? (
+                      <input
+                        name="siteUrl"
+                        autoComplete="off"
+                        className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
+                        placeholder="https://…"
+                        value={siteUrl}
+                        onChange={(e) => setSiteUrl(e.target.value)}
+                        required
+                      />
+                    ) : (
+                      <input
+                        name="repoUrl"
+                        autoComplete="off"
+                        className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
+                        placeholder="https://github.com/…"
+                        value={repoUrl}
+                        onChange={(e) => setRepoUrl(e.target.value)}
+                        required
+                      />
+                    )}
                   </div>
                   <div className="group relative w-full shrink-0 sm:w-auto">
                     <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-800" />
@@ -1235,6 +1299,7 @@ export function ReversePromptHome({
                     </button>
                   </div>
                 </div>
+                {!isHome ? (
                 <div className="flex w-full flex-col gap-2">
                   <label
                     className={`flex items-center gap-2 text-sm font-medium ${
@@ -1270,6 +1335,7 @@ export function ReversePromptHome({
                     </div>
                   ) : null}
                 </div>
+                ) : null}
               </div>
 
               {loading ? (
@@ -1381,18 +1447,26 @@ export function ReversePromptHome({
                   </div>
                 </div>
               ) : null}
-              {isHome && !loading && !customReverse ? (
+              {isHome && !loading ? (
                 <div className="mt-4 flex flex-col gap-4">
                   <div className="flex flex-wrap gap-2">
                     <span className="w-full text-sm text-zinc-600">
-                      Try example repos:
+                      {homeMode === "website"
+                        ? "Try example websites:"
+                        : "Try example repos:"}
                     </span>
-                    {HOME_EXAMPLES.map(({ label, url }) => (
+                    {(homeMode === "website"
+                      ? HOME_WEBSITE_EXAMPLES
+                      : HOME_EXAMPLES
+                    ).map(({ label, url }) => (
                       <div key={url} className="group relative">
                         <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
                         <button
                           type="button"
-                          onClick={() => setRepoUrl(url)}
+                          onClick={() => {
+                            if (homeMode === "website") setSiteUrl(url);
+                            else setRepoUrl(url);
+                          }}
                           className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#EBDBB7] px-3 py-1 text-sm font-medium text-zinc-900 transition-transform hover:bg-[#ffc480] group-hover:-translate-x-px group-hover:-translate-y-px"
                         >
                           {label}
@@ -1406,19 +1480,31 @@ export function ReversePromptHome({
             </form>
           </div>
           {!isHome ? <CodeRabbitBanner className="w-full" /> : null}
-          {isHome && (
+          {isHome ? (
             <p className="text-center text-sm text-zinc-500">
-              You can also replace{" "}
-              <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
-                hub
-              </code>{" "}
-              with{" "}
-              <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
-                reverse
-              </code>{" "}
-              in any GitHub URL.
+              {homeMode === "codebase" ? (
+                <>
+                  Also works: replace{" "}
+                  <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
+                    hub
+                  </code>{" "}
+                  with{" "}
+                  <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
+                    reverse
+                  </code>{" "}
+                  in any GitHub URL.
+                </>
+              ) : (
+                <>
+                  Also works:{" "}
+                  <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
+                    pinterest.gitreverse.com
+                  </code>{" "}
+                  style hostnames.
+                </>
+              )}
             </p>
-          )}
+          ) : null}
           </div>
         </div>
 
@@ -1483,22 +1569,13 @@ export function ReversePromptHome({
               </div>
               {!lastResultWasCustom && !loading ? (
                 <p className="mt-4 text-center text-sm text-zinc-600">
-                  Want more depth?{" "}
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="cursor-pointer font-medium text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-950"
-                    onClick={() => {
-                      startDeepReverse();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      startDeepReverse();
-                    }}
+                  Have a live product UI?{" "}
+                  <Link
+                    href="/?mode=website"
+                    className="font-bold text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:decoration-zinc-900"
                   >
-                    Deep Reverse
-                  </span>
+                    Try website reverse
+                  </Link>
                 </p>
               ) : null}
             </section>

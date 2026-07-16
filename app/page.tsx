@@ -5,18 +5,18 @@ import { JsonLd } from "@/components/json-ld";
 export const metadata: Metadata = {
   title: "GitReverse",
   description:
-    "Steal any code and make it your own. Paste a GitHub URL and get a plain-language coding agent prompt you can build from.",
+    "Reverse engineer a GitHub repo or a website into a prompt you can build from.",
   alternates: { canonical: "https://gitreverse.com" },
   openGraph: {
     title: "GitReverse",
     description:
-      "Steal any code and make it your own. Paste a GitHub URL and get a plain-language coding agent prompt you can build from.",
+      "Reverse engineer a GitHub repo or a website into a prompt you can build from.",
     url: "https://gitreverse.com",
   },
   twitter: {
     title: "GitReverse",
     description:
-      "Steal any code and make it your own. Paste a GitHub URL and get a plain-language coding agent prompt you can build from.",
+      "Reverse engineer a GitHub repo or a website into a prompt you can build from.",
   },
 };
 
@@ -26,7 +26,7 @@ const websiteJsonLd = {
   name: "GitReverse",
   url: "https://gitreverse.com",
   description:
-    "Reverse engineer any GitHub repository into a plain-language coding agent prompt you can build from.",
+    "Reverse engineer any GitHub repository or website into a plain-language coding agent prompt you can build from.",
   potentialAction: {
     "@type": "SearchAction",
     target: {

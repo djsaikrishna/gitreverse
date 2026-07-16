@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>02 · Block tabs — GitReverse design</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="wordmark" href="./index.html">Git<span class="rev">Reverse</span></a>
+      <div class="nav-links">
+        <a href="#">Library</a>
+        <a href="#">Premium</a>
+      </div>
+    </header>
+
+    <main class="main">
+      <a class="back" href="./index.html">← All variations</a>
+
+      <div class="hero">
+        <span class="badge">Var 02</span>
+        <h1>Reverse into<br />a prompt</h1>
+        <p>Paste a GitHub repo or a website. One tool, two modes.</p>
+      </div>
+
+      <div class="switch-block" role="tablist" aria-label="Reverse mode">
+        <button type="button" id="mode-code" aria-pressed="true">
+          Codebase
+        </button>
+        <button type="button" id="mode-web" aria-pressed="false">
+          Website
+        </button>
+      </div>
+
+      <div class="card-wrap">
+        <div class="shadow"></div>
+        <form class="card" onsubmit="return false">
+          <div class="row">
+            <div class="field">
+              <div class="shadow"></div>
+              <input
+                id="input"
+                type="text"
+                autocomplete="off"
+                placeholder="https://github.com/…"
+              />
+            </div>
+            <div class="cta">
+              <div class="shadow"></div>
+              <button type="submit" id="submit">Get Prompt</button>
+            </div>
+          </div>
+          <div class="examples" id="examples"></div>
+        </form>
+      </div>
+
+      <p class="cross" id="cross"></p>
+      <p class="hint" id="hint"></p>
+    </main>
+
+    <aside class="anno">
+      <strong>Louder switch</strong>
+      Red active segment matches Get Prompt. Unified headline above.
+    </aside>
+
+    <script>
+      const REPOS = [
+        { label: "Next.js", url: "https://github.com/vercel/next.js" },
+        { label: "React", url: "https://github.com/facebook/react" },
+        { label: "Supabase", url: "https://github.com/supabase/supabase" },
+      ];
+      const SITES = [
+        { label: "YouTube", url: "https://youtube.com" },
+        { label: "Pinterest", url: "https://pinterest.com" },
+        { label: "Xbox", url: "https://xbox.com" },
+        { label: "Apple", url: "https://apple.com" },
+        { label: "Discord", url: "https://discord.com" },
+      ];
+
+      let mode = "code";
+      const input = document.getElementById("input");
+      const examples = document.getElementById("examples");
+      const cross = document.getElementById("cross");
+      const hint = document.getElementById("hint");
+      const btnCode = document.getElementById("mode-code");
+      const btnWeb = document.getElementById("mode-web");
+
+      function render() {
+        const isCode = mode === "code";
+        btnCode.setAttribute("aria-pressed", String(isCode));
+        btnWeb.setAttribute("aria-pressed", String(!isCode));
+        input.placeholder = isCode ? "https://github.com/…" : "https://…";
+        input.value = "";
+
+        const list = isCode ? REPOS : SITES;
+        examples.innerHTML =
+          `<span class="label">${isCode ? "Try example repos:" : "Try example websites:"}</span>` +
+          list
+            .map(
+              (ex) =>
+                `<div class="chip"><div class="shadow"></div><button type="button" data-url="${ex.url}">${ex.label}</button></div>`
+            )
+            .join("");
+
+        cross.innerHTML = isCode
+          ? `Or reverse a live product UI — <button type="button" class="linkish" data-switch="web">try website reverse</button>`
+          : `Or reverse the source — <button type="button" class="linkish" data-switch="code">try codebase reversing</button>`;
+
+        hint.innerHTML = isCode
+          ? `Also works: replace <code>hub</code> with <code>reverse</code> in any GitHub URL.`
+          : `Also works: <code>pinterest.gitreverse.com</code> style hostnames.`;
+      }
+
+      btnCode.addEventListener("click", () => {
+        mode = "code";
+        render();
+      });
+      btnWeb.addEventListener("click", () => {
+        mode = "web";
+        render();
+      });
+      examples.addEventListener("click", (e) => {
+        const t = e.target.closest("button[data-url]");
+        if (t) {
+          input.value = t.dataset.url;
+          input.focus();
+        }
+      });
+      cross.addEventListener("click", (e) => {
+        const t = e.target.closest("[data-switch]");
+        if (t) {
+          mode = t.dataset.switch;
+          render();
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>
