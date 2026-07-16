@@ -7,6 +7,7 @@ import { getPlanLabel, type BillingPlan } from "@/lib/billing-config";
 import { useAuth } from "@/contexts/AuthContext";
 import { AUTH_SKIP, isSupabaseAuthConfigured } from "@/lib/supabase-auth";
 import { fetchBillingStatus } from "@/lib/subscription-status-client";
+import { useAppHref } from "@/lib/use-app-href";
 import type { User } from "@supabase/supabase-js";
 
 function IconBooks({ className }: { className?: string }) {
@@ -161,7 +162,7 @@ function NavDivider() {
   );
 }
 
-function LibraryNavLink({ isActive }: { isActive: boolean }) {
+function LibraryNavLink({ isActive, href }: { isActive: boolean; href: string }) {
   const [hov, setHov] = useState(false);
   const shadowShift = hov ? "translate(2px,2px)" : "translate(3px,3px)";
   const btnShift = hov ? "-translate-x-px -translate-y-px" : "";
@@ -179,7 +180,7 @@ function LibraryNavLink({ isActive }: { isActive: boolean }) {
         aria-hidden
       />
       <Link
-        href="/library"
+        href={href}
         aria-current={isActive ? "page" : undefined}
         className={buttonClass}
       >
@@ -192,6 +193,10 @@ function LibraryNavLink({ isActive }: { isActive: boolean }) {
 
 export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBalanceProp }: NavbarProps) {
   const pathname = usePathname();
+  const homeHref = useAppHref("/");
+  const libraryHref = useAppHref("/library");
+  const historyHref = useAppHref("/history");
+  const premiumHref = useAppHref("/premium");
   const {
     user,
     session,
@@ -353,7 +358,7 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
       <nav className="sticky top-0 z-50 border-b-[3px] border-zinc-900 bg-[#FFFDF8]">
       <div className="mx-auto flex h-16 max-w-4xl items-center justify-between gap-1.5 px-3 sm:gap-3 sm:px-6">
         <Link
-          href="/"
+          href={homeHref}
           className="shrink-0 text-lg font-bold tracking-tight transition-transform hover:-translate-y-0.5 sm:text-xl"
           aria-label="GitReverse home"
         >
@@ -362,7 +367,7 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
         </Link>
 
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
-          <LibraryNavLink isActive={pathname === "/library"} />
+          <LibraryNavLink isActive={pathname === "/library"} href={libraryHref} />
 
           <NavDivider />
 
@@ -421,7 +426,7 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
                         ) : null}
                       </div>
                       <Link
-                        href="/history"
+                        href={historyHref}
                         role="menuitem"
                         className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
                         onClick={() => setMenuOpen(false)}
@@ -431,7 +436,7 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
                       </Link>
                       {!isSubscriber ? (
                         <Link
-                          href="/premium"
+                          href={premiumHref}
                           role="menuitem"
                           className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
                           onClick={() => setMenuOpen(false)}
@@ -441,7 +446,7 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
                         </Link>
                       ) : creditBalance === 0 ? (
                         <Link
-                          href="/premium"
+                          href={premiumHref}
                           role="menuitem"
                           className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
                           onClick={() => setMenuOpen(false)}

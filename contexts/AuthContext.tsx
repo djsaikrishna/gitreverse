@@ -15,6 +15,7 @@ import {
   getSupabaseAuthClient,
   isSupabaseAuthConfigured,
 } from "@/lib/supabase-auth";
+import { appHref } from "@/lib/site-url";
 
 export type AuthContextValue = {
   user: User | null;
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("GitReverse auth is not configured.");
     }
 
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = appHref(window.location.host, "/auth/callback");
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "github",
