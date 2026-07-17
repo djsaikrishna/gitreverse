@@ -43,7 +43,6 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
   const [page, setPage] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
-  const [initialFetchDone, setInitialFetchDone] = useState(initialData.length > 0);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -61,7 +60,8 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
         limit: String(PAGE_SIZE),
       });
       const res = await fetch(`/api/library?${params.toString()}`, {
-        cache: "no-store",
+        // Browse responses are CDN-cached; search stays private/no-store server-side.
+        cache: searchVal ? "no-store" : "default",
       });
       if (!res.ok) return;
       const json = (await res.json()) as {
@@ -95,15 +95,6 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
   }, [search, sort, fetchPage]);
-
-  // Re-sync after mount so library data is not stale from RSC/router cache.
-  useEffect(() => {
-    startTransition(() => {
-      void fetchPage("", "newest", 0, false).then(() => {
-        setInitialFetchDone(true);
-      });
-    });
-  }, [fetchPage]);
 
   async function handleLoadMore() {
     setLoadingMore(true);
@@ -241,7 +232,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
 
         {/* Card grid */}
         {entries.length === 0 ? (
-          !initialFetchDone ? (
+          isPending ? (
             <SkeletonGrid />
           ) : (
             <div className="flex flex-col items-center gap-3 py-24 text-center">

@@ -34,11 +34,23 @@ export async function GET(req: NextRequest) {
         limit,
         useHybrid: hasEmbeddingProvider(),
       });
-      return NextResponse.json(result);
+      return NextResponse.json(result, {
+        headers: {
+          "Cache-Control": "private, no-store",
+        },
+      });
     }
 
     const result = await browseLibrary({ supabase, sort, page, limit });
-    return NextResponse.json({ ...result, strategy: "browse" as const });
+    return NextResponse.json(
+      { ...result, strategy: "browse" as const },
+      {
+        headers: {
+          // Browse is cacheable; keep CDN warm so Library navigations stay fast.
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Search failed.";
     return NextResponse.json({ error: message }, { status: 500 });
