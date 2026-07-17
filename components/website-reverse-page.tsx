@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { track } from "@vercel/analytics";
+import { trackAnythingClick, trackContextDevClick } from "@/lib/partner-click-tracker";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { PromptMarkdown } from "@/components/prompt-markdown";
@@ -304,7 +304,7 @@ export function WebsiteReversePage({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Build this with Anything"
-                    onClick={() => track("Build This Click", { destination: "anything.com" })}
+                    onClick={() => trackAnythingClick("website-prompt")}
                     className="group/build relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
                     <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/build:translate-x-px group-hover/build:translate-y-px" />
@@ -333,6 +333,7 @@ export function WebsiteReversePage({
                   href="https://context.dev?ref=gitreverse"
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackContextDevClick("website-crosssell")}
                   className="font-bold text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:decoration-zinc-900"
                 >
                   Get web context with Context.dev

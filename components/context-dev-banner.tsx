@@ -1,4 +1,4 @@
-import { track } from "@vercel/analytics";
+import { trackContextDevClick } from "@/lib/partner-click-tracker";
 
 const CONTEXT_DEV_URL = "https://context.dev?ref=gitreverse";
 
@@ -49,7 +49,7 @@ export function ContextDevBanner({
         href={CONTEXT_DEV_URL}
         target="_blank"
         rel="sponsored noopener noreferrer"
-        onClick={() => track("Context.dev Click", { placement: "home-card" })}
+        onClick={() => trackContextDevClick("home-card")}
         className={`group flex items-center gap-3 rounded-lg border-[2px] border-zinc-900/15 bg-white/70 px-3 py-2.5 transition-colors hover:bg-white ${className ?? ""}`}
       >
         {content}
@@ -63,7 +63,7 @@ export function ContextDevBanner({
       href={CONTEXT_DEV_URL}
       target="_blank"
       rel="sponsored noopener noreferrer"
-      onClick={() => track("Context.dev Click", { placement: "repo-card" })}
+      onClick={() => trackContextDevClick("repo-card")}
       className={`group relative mt-4 block ${className ?? ""}`}
     >
       <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg bg-zinc-900" />

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { track } from "@vercel/analytics";
+import { trackAnythingClick } from "@/lib/partner-click-tracker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -1553,7 +1553,7 @@ export function ReversePromptHome({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Build this with Anything"
-                    onClick={() => track("Build This Click", { destination: "anything.com" })}
+                    onClick={() => trackAnythingClick("codebase-prompt")}
                     className="group/build relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
                     <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/build:translate-x-px group-hover/build:translate-y-px" />
