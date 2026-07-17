@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { track } from "@vercel/analytics";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { PromptMarkdown } from "@/components/prompt-markdown";
 import { WebsiteDesignFlavorText } from "@/components/website-design-flavor-text";
 import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
-import { useAppHref } from "@/lib/use-app-href";
 
 type WebsiteReversePageProps = {
   siteSlug: string;
@@ -25,10 +25,9 @@ function hostnameOf(url: string, fallback: string): string {
 export function WebsiteReversePage({
   siteSlug,
   targetUrl,
-  designPath,
+  designPath: _designPath,
 }: WebsiteReversePageProps) {
   const router = useRouter();
-  const codebaseHomeHref = useAppHref("/");
 
   const [currentSlug, setCurrentSlug] = useState(siteSlug);
   const [currentTargetUrl, setCurrentTargetUrl] = useState(targetUrl);
@@ -181,10 +180,6 @@ export function WebsiteReversePage({
   }
 
   const displayHost = hostnameOf(currentTargetUrl, currentSlug);
-  const currentDesignPath =
-    currentSlug === siteSlug
-      ? designPath
-      : `/api/website-design/${encodeURIComponent(currentSlug)}`;
   const isWritingDesign = statusLine === "Writing design.md";
 
   return (
@@ -305,14 +300,16 @@ export function WebsiteReversePage({
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <a
-                    href={currentDesignPath}
+                    href={`https://anything.com?prompt=${encodeURIComponent(prompt)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group/design relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
+                    aria-label="Build this with Anything"
+                    onClick={() => track("Build This Click", { destination: "anything.com" })}
+                    className="group/build relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
-                    <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/design:translate-x-px group-hover/design:translate-y-px" />
-                    <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/design:bg-zinc-50">
-                      Open design system
+                    <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/build:translate-x-px group-hover/build:translate-y-px" />
+                    <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/build:bg-zinc-50">
+                      Build this
                     </span>
                   </a>
                   <div className="group relative">
@@ -331,12 +328,14 @@ export function WebsiteReversePage({
                 <PromptMarkdown>{prompt}</PromptMarkdown>
               </div>
               <p className="mt-4 text-center text-sm text-zinc-600">
-                Want the engineering side?{" "}
+                Building with AI agents?{" "}
                 <a
-                  href={codebaseHomeHref}
+                  href="https://context.dev?ref=gitreverse"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="font-bold text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:decoration-zinc-900"
                 >
-                  Try codebase reversing
+                  Get web context with Context.dev
                 </a>
               </p>
             </section>
