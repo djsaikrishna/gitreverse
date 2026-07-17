@@ -11,6 +11,13 @@ import {
 
 const VIEW_BOOST = 0.4;
 const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+/** Cap how many rows we pull per source when merging pages. */
+const MAX_FETCH_LIMIT = 96;
+
+const CODE_TABLE = "library_code_entries";
+const WEBSITE_TABLE = "library_website_entries";
+const CODE_COLUMNS = "id, owner, repo, prompt, cached_at, views, title";
+const WEBSITE_COLUMNS = "slug, target_url, prompt, cached_at";
 
 type PromptRow = {
   id: number;
@@ -36,6 +43,11 @@ function searchWords(raw: string): string[] {
     .split(/\s+/u)
     .map((w) => w.trim())
     .filter(Boolean);
+}
+
+function previewPrompt(prompt: string | null | undefined): string {
+  if (!prompt) return "";
+  return prompt.length > 180 ? prompt.slice(0, 180) : prompt;
 }
 
 function applyCodeSort(
@@ -97,11 +109,7 @@ async function fetchCodeBrowse(
   fetchLimit: number
 ): Promise<{ rows: PromptRow[]; total: number }> {
   const { data, count, error } = await applyCodeSort(
-    supabase
-      .from("prompt_cache")
-      .select("id, owner, repo, prompt, cached_at, views, title", {
-        count: "exact",
-      }),
+    supabase.from(CODE_TABLE).select(CODE_COLUMNS, { count: "exact" }),
     sort,
     false
   ).range(0, fetchLimit - 1);
@@ -116,9 +124,7 @@ async function fetchWebsiteBrowse(
   fetchLimit: number
 ): Promise<{ rows: WebsiteRow[]; total: number }> {
   const { data, count, error } = await applyWebsiteSort(
-    supabase
-      .from("website_reverse_cache")
-      .select("slug, target_url, prompt, cached_at", { count: "exact" }),
+    supabase.from(WEBSITE_TABLE).select(WEBSITE_COLUMNS, { count: "exact" }),
     sort
   ).range(0, fetchLimit - 1);
 
@@ -138,10 +144,8 @@ async function fetchCodeSearch(
 
   const runQuery = (strategy?: FtsStrategy) => {
     let query = supabase
-      .from("prompt_cache")
-      .select("id, owner, repo, prompt, cached_at, views, title", {
-        count: "exact",
-      });
+      .from(CODE_TABLE)
+      .select(CODE_COLUMNS, { count: "exact" });
 
     if (words.length > 0 && strategy) {
       switch (strategy) {
@@ -158,9 +162,10 @@ async function fetchCodeSearch(
           });
           break;
         case "ilike-and":
+          // Avoid ilike on prompt — full-text scan blows past anon's 3s timeout.
           for (const word of words) {
             query = query.or(
-              `owner.ilike.%${word}%,repo.ilike.%${word}%,prompt.ilike.%${word}%`
+              `owner.ilike.%${word}%,repo.ilike.%${word}%,title.ilike.%${word}%`
             );
           }
           break;
@@ -168,7 +173,7 @@ async function fetchCodeSearch(
           const clauses = words.flatMap((w) => [
             `owner.ilike.%${w}%`,
             `repo.ilike.%${w}%`,
-            `prompt.ilike.%${w}%`,
+            `title.ilike.%${w}%`,
           ]);
           query = query.or(clauses.join(","));
           break;
@@ -216,14 +221,13 @@ async function fetchWebsiteSearch(
 ): Promise<{ rows: WebsiteRow[]; total: number }> {
   const words = searchWords(search);
   let query = supabase
-    .from("website_reverse_cache")
-    .select("slug, target_url, prompt, cached_at", { count: "exact" });
+    .from(WEBSITE_TABLE)
+    .select(WEBSITE_COLUMNS, { count: "exact" });
 
   if (words.length > 0) {
+    // Metadata-only match — scanning prompt text times out under anon limits.
     for (const word of words) {
-      query = query.or(
-        `slug.ilike.%${word}%,target_url.ilike.%${word}%,prompt.ilike.%${word}%`
-      );
+      query = query.or(`slug.ilike.%${word}%,target_url.ilike.%${word}%`);
     }
   }
 
@@ -237,7 +241,6 @@ async function fetchWebsiteSearch(
 }
 
 function scoreWebsiteSearch(row: WebsiteRow, search: string): number {
-  const haystack = `${row.slug} ${row.target_url} ${row.prompt}`.toLowerCase();
   const words = searchWords(search);
   if (words.length === 0) return 0;
   let score = 0;
@@ -270,21 +273,31 @@ async function fetchCodeHybrid(
   if (ids.length === 0) return rows;
 
   const { data: titleRows } = await supabase
-    .from("prompt_cache")
-    .select("id, title")
+    .from(CODE_TABLE)
+    .select("id, title, prompt")
     .in("id", ids);
 
-  const titleById = new Map(
-    (titleRows ?? []).map((row) => [row.id as number, row.title as string | null])
+  const metaById = new Map(
+    (titleRows ?? []).map((row) => [
+      row.id as number,
+      {
+        title: row.title as string | null,
+        prompt: previewPrompt(row.prompt as string | null),
+      },
+    ])
   );
 
-  const boosted = rows.map((row) => ({
-    ...row,
-    title: titleById.get(row.id) ?? row.title ?? null,
-    relevance_score:
-      (row.relevance_score ?? 0) *
-      (1 + Math.log10((row.views ?? 0) + 1) * VIEW_BOOST),
-  }));
+  const boosted = rows.map((row) => {
+    const meta = metaById.get(row.id);
+    return {
+      ...row,
+      prompt: meta?.prompt ?? previewPrompt(row.prompt),
+      title: meta?.title ?? row.title ?? null,
+      relevance_score:
+        (row.relevance_score ?? 0) *
+        (1 + Math.log10((row.views ?? 0) + 1) * VIEW_BOOST),
+    };
+  });
 
   const maxScore = boosted.reduce(
     (max, row) => Math.max(max, row.relevance_score ?? 0),
@@ -353,13 +366,17 @@ function mergeSearch(
   return entries;
 }
 
+function mergeFetchLimit(page: number, limit: number): number {
+  return Math.min(MAX_FETCH_LIMIT, (page + 1) * limit);
+}
+
 export async function browseLibrary(opts: {
   supabase: SupabaseClient;
   sort: SortOption;
   page: number;
   limit: number;
 }): Promise<{ data: LibraryEntry[]; total: number }> {
-  const fetchLimit = (opts.page + 1) * opts.limit;
+  const fetchLimit = mergeFetchLimit(opts.page, opts.limit);
   const [code, website] = await Promise.all([
     fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit),
     fetchWebsiteBrowse(opts.supabase, opts.sort, fetchLimit),
@@ -384,7 +401,7 @@ export async function searchLibrary(opts: {
   total: number;
   strategy: string;
 }> {
-  const fetchLimit = (opts.page + 1) * opts.limit;
+  const fetchLimit = mergeFetchLimit(opts.page, opts.limit);
 
   if (opts.useHybrid) {
     try {

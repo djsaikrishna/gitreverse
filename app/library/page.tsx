@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { connection } from "next/server";
+import { unstable_cache } from "next/cache";
 import { fetchInitialLibrary } from "@/lib/library-query";
 import { getSupabase } from "@/lib/supabase";
 import { LibraryPage } from "@/components/library-page";
 import { JsonLd } from "@/components/json-ld";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Prompt Library",
@@ -28,18 +28,27 @@ export const metadata: Metadata = {
 
 const INITIAL_LIMIT = 24;
 
+const getCachedInitialLibrary = unstable_cache(
+  async () => {
+    const supabase = getSupabase();
+    if (!supabase) return { data: [], total: 0 };
+    try {
+      return await fetchInitialLibrary(supabase, INITIAL_LIMIT);
+    } catch (error) {
+      console.error(
+        "[library] initial fetch failed:",
+        error instanceof Error ? error.message : error
+      );
+      return { data: [], total: 0 };
+    }
+  },
+  ["library-initial-newest-v2"],
+  { revalidate: 60 }
+);
+
 export default async function LibraryRoute() {
-  await connection();
-  const supabase = getSupabase();
-
-  let initialData: Awaited<ReturnType<typeof fetchInitialLibrary>>["data"] = [];
-  let initialTotal = 0;
-
-  if (supabase) {
-    const result = await fetchInitialLibrary(supabase, INITIAL_LIMIT);
-    initialData = result.data;
-    initialTotal = result.total;
-  }
+  const { data: initialData, total: initialTotal } =
+    await getCachedInitialLibrary();
 
   const collectionJsonLd = {
     "@context": "https://schema.org",
