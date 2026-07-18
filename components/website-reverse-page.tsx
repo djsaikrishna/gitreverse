@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
 import { PromptMarkdown } from "@/components/prompt-markdown";
 import { WebsiteDesignFlavorText } from "@/components/website-design-flavor-text";
@@ -289,6 +290,7 @@ export function WebsiteReversePage({
               ) : null}
             </form>
           </div>
+          <CodeRabbitBanner className="w-full" placement="website-card" />
         </div>
 
         {prompt ? (
