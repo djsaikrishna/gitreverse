@@ -142,7 +142,7 @@ export async function ensureWebsiteReversed(opts: {
     if (cached) {
       return {
         ok: true,
-        prompt: cached.meta.prompt,
+        prompt: appendDesignSystemLink(cached.meta.prompt, slug),
         designMd: cached.designMd,
         designPath: designApiPath(slug),
         fromCache: true,

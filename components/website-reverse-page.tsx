@@ -301,12 +301,12 @@ export function WebsiteReversePage({
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <a
-                    href={`/designswap?contentUrl=${encodeURIComponent(currentTargetUrl)}`}
+                    href={`/designs/${encodeURIComponent(currentSlug)}`}
                     className="group/design relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
                     <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/design:translate-x-px group-hover/design:translate-y-px" />
                     <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/design:bg-zinc-50">
-                      Design swap
+                      Open design system
                     </span>
                   </a>
                   <div className="group relative">

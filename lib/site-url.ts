@@ -12,6 +12,10 @@ export function websiteDesignApiUrl(slug: string): string {
   return `${getSiteBaseUrl()}/api/website-design/${encodeURIComponent(slug)}`;
 }
 
+export function websiteDesignPageUrl(slug: string): string {
+  return `${getSiteBaseUrl()}/designs/${encodeURIComponent(slug)}`;
+}
+
 function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
