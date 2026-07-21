@@ -140,9 +140,24 @@ export async function ensureWebsiteReversed(opts: {
   if (!force) {
     const cached = await readWebsiteReverse(slug);
     if (cached) {
+      const prompt = appendDesignSystemLink(cached.meta.prompt, slug);
+      if (prompt !== cached.meta.prompt) {
+        // Heal stale design-system URLs in the cache (api → /designs, etc.)
+        void writeWebsiteReverse({
+          slug,
+          targetUrl: cached.meta.targetUrl,
+          designMd: cached.designMd,
+          prompt,
+        }).catch((e) => {
+          console.warn(
+            `[reverse-website] failed to heal design link for ${slug}:`,
+            e instanceof Error ? e.message : e
+          );
+        });
+      }
       return {
         ok: true,
-        prompt: appendDesignSystemLink(cached.meta.prompt, slug),
+        prompt,
         designMd: cached.designMd,
         designPath: designApiPath(slug),
         fromCache: true,
