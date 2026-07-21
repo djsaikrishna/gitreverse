@@ -22,6 +22,7 @@ export async function scrapeWebsite(url: string): Promise<FirecrawlScrapeResult>
     );
   }
 
+  const startedAt = Date.now();
   let res: Response;
   try {
     res = await fetch(FIRECRAWL_SCRAPE_URL, {
@@ -36,8 +37,10 @@ export async function scrapeWebsite(url: string): Promise<FirecrawlScrapeResult>
         onlyMainContent: true,
       }),
     });
+    console.log(`[firecrawl] scrape ${url} status=${res.status} elapsed=${Date.now() - startedAt}ms`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.log(`[firecrawl] scrape ${url} FAILED after ${Date.now() - startedAt}ms: ${msg}`);
     throw new Error(`Firecrawl request failed: ${msg}`);
   }
 

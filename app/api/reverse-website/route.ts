@@ -167,6 +167,7 @@ async function runWebsiteReverse(opts: {
     }
   }
 
+  const requestStartedAt = Date.now();
   const llm = resolveLlmTarget();
   if ("error" in llm) {
     return { ok: false, error: llm.error, status: 500 };
@@ -174,16 +175,24 @@ async function runWebsiteReverse(opts: {
 
   onStatus?.("Visiting site");
   let evidence: WebsiteEvidence;
+  const evidenceStartedAt = Date.now();
   try {
     evidence = await gatherWebsiteEvidence(targetUrl);
     onStatus?.(evidenceStatusMessage(evidence.source));
+    console.log(
+      `[reverse-website] evidence source=${evidence.source} elapsed=${Date.now() - evidenceStartedAt}ms`
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.log(
+      `[reverse-website] evidence FAILED after ${Date.now() - evidenceStartedAt}ms: ${msg}`
+    );
     return { ok: false, error: msg, status: 502 };
   }
 
   onStatus?.("Understanding design");
   onStatus?.("Writing design.md");
+  const designStartedAt = Date.now();
   const designResult = await callQuickLlm(
     llm,
     buildWebsiteDesignSystemPrompt(),
@@ -193,11 +202,13 @@ async function runWebsiteReverse(opts: {
     }),
     12_000
   );
+  console.log(`[reverse-website] design.md elapsed=${Date.now() - designStartedAt}ms`);
   if (!designResult.ok) {
     return { ok: false, error: designResult.error, status: designResult.status };
   }
 
   onStatus?.("Reverse engineering prompt");
+  const promptStartedAt = Date.now();
   const promptResult = await callQuickLlm(
     llm,
     WEBSITE_REVERSE_SYSTEM_PROMPT,
@@ -208,11 +219,13 @@ async function runWebsiteReverse(opts: {
     }),
     4096
   );
+  console.log(`[reverse-website] prompt elapsed=${Date.now() - promptStartedAt}ms`);
   if (!promptResult.ok) {
     return { ok: false, error: promptResult.error, status: promptResult.status };
   }
 
   const finalPrompt = appendDesignSystemLink(promptResult.text, slug);
+  console.log(`[reverse-website] TOTAL elapsed=${Date.now() - requestStartedAt}ms`);
 
   try {
     await writeWebsiteReverse({
