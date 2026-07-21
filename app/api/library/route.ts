@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasEmbeddingProvider } from "@/lib/embeddings";
 import { browseLibrary, searchLibrary } from "@/lib/library-query";
-import type { SortOption } from "@/lib/library-types";
+import type { SortOption, LibraryKindFilter } from "@/lib/library-types";
 import { getSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const LIMIT = 24;
+
+function parseKindFilter(raw: string | null): LibraryKindFilter {
+  const v = raw?.trim().toLowerCase();
+  if (v === "code" || v === "website") return v;
+  return "all";
+}
 
 export async function GET(req: NextRequest) {
   const supabase = getSupabase();
@@ -18,6 +24,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const search = searchParams.get("search")?.trim() ?? "";
   const sort = (searchParams.get("sort") ?? "newest") as SortOption;
+  const kind = parseKindFilter(searchParams.get("kind"));
   const page = Math.max(0, parseInt(searchParams.get("page") ?? "0", 10));
   const limit = Math.min(
     100,
@@ -32,6 +39,7 @@ export async function GET(req: NextRequest) {
         sort,
         page,
         limit,
+        kind,
         useHybrid: hasEmbeddingProvider(),
       });
       return NextResponse.json(result, {
@@ -41,7 +49,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const result = await browseLibrary({ supabase, sort, page, limit });
+    const result = await browseLibrary({ supabase, sort, page, limit, kind });
     return NextResponse.json(
       { ...result, strategy: "browse" as const },
       {

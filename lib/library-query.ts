@@ -7,6 +7,7 @@ import {
   websiteEntryFromRow,
   type LibraryEntry,
   type SortOption,
+  type LibraryKindFilter,
 } from "@/lib/library-types";
 
 const VIEW_BOOST = 0.4;
@@ -375,8 +376,33 @@ export async function browseLibrary(opts: {
   sort: SortOption;
   page: number;
   limit: number;
+  kind?: LibraryKindFilter;
 }): Promise<{ data: LibraryEntry[]; total: number }> {
+  const kind = opts.kind ?? "all";
   const fetchLimit = mergeFetchLimit(opts.page, opts.limit);
+
+  if (kind === "code") {
+    const code = await fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit);
+    const merged = mergeBrowse(code.rows, [], opts.sort);
+    return {
+      data: paginateLibraryEntries(merged, opts.page, opts.limit),
+      total: code.total,
+    };
+  }
+
+  if (kind === "website") {
+    const website = await fetchWebsiteBrowse(
+      opts.supabase,
+      opts.sort,
+      fetchLimit
+    );
+    const merged = mergeBrowse([], website.rows, opts.sort);
+    return {
+      data: paginateLibraryEntries(merged, opts.page, opts.limit),
+      total: website.total,
+    };
+  }
+
   const [code, website] = await Promise.all([
     fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit),
     fetchWebsiteBrowse(opts.supabase, opts.sort, fetchLimit),
@@ -396,12 +422,66 @@ export async function searchLibrary(opts: {
   page: number;
   limit: number;
   useHybrid: boolean;
+  kind?: LibraryKindFilter;
 }): Promise<{
   data: LibraryEntry[];
   total: number;
   strategy: string;
 }> {
+  const kind = opts.kind ?? "all";
   const fetchLimit = mergeFetchLimit(opts.page, opts.limit);
+
+  if (kind === "website") {
+    const website = await fetchWebsiteSearch(
+      opts.supabase,
+      opts.search,
+      opts.sort,
+      fetchLimit
+    );
+    const merged = mergeSearch([], website.rows, opts.search);
+    return {
+      data: paginateLibraryEntries(merged, opts.page, opts.limit),
+      total: website.total,
+      strategy: "website-metadata",
+    };
+  }
+
+  if (kind === "code") {
+    if (opts.useHybrid) {
+      try {
+        const [codeRows, codeTotal] = await Promise.all([
+          fetchCodeHybrid(opts.supabase, opts.search, fetchLimit),
+          hybridSearchCount(opts.supabase, opts.search),
+        ]);
+        if (codeRows.length > 0) {
+          const merged = mergeSearch(codeRows, [], opts.search);
+          return {
+            data: paginateLibraryEntries(merged, opts.page, opts.limit),
+            total: codeTotal,
+            strategy: "hybrid",
+          };
+        }
+      } catch (error) {
+        console.error(
+          "[library] hybrid search failed, falling back to FTS:",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    const code = await fetchCodeSearch(
+      opts.supabase,
+      opts.search,
+      opts.sort,
+      fetchLimit
+    );
+    const merged = mergeSearch(code.rows, [], opts.search);
+    return {
+      data: paginateLibraryEntries(merged, opts.page, opts.limit),
+      total: code.total,
+      strategy: code.strategy,
+    };
+  }
 
   if (opts.useHybrid) {
     try {

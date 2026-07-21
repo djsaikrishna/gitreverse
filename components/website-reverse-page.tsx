@@ -12,7 +12,6 @@ import { useAppHref } from "@/lib/use-app-href";
 type WebsiteReversePageProps = {
   siteSlug: string;
   targetUrl: string;
-  designPath: string;
 };
 
 function hostnameOf(url: string, fallback: string): string {
@@ -26,7 +25,6 @@ function hostnameOf(url: string, fallback: string): string {
 export function WebsiteReversePage({
   siteSlug,
   targetUrl,
-  designPath,
 }: WebsiteReversePageProps) {
   const router = useRouter();
   const codebaseHomeHref = useAppHref("/");
@@ -182,10 +180,6 @@ export function WebsiteReversePage({
   }
 
   const displayHost = hostnameOf(currentTargetUrl, currentSlug);
-  const currentDesignPath =
-    currentSlug === siteSlug
-      ? designPath
-      : `/api/website-design/${encodeURIComponent(currentSlug)}`;
   const isWritingDesign = statusLine === "Writing design.md";
 
   return (
@@ -307,14 +301,12 @@ export function WebsiteReversePage({
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <a
-                    href={currentDesignPath}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={`/designswap?contentUrl=${encodeURIComponent(currentTargetUrl)}`}
                     className="group/design relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
                     <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/design:translate-x-px group-hover/design:translate-y-px" />
                     <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/design:bg-zinc-50">
-                      Open design system
+                      Design swap
                     </span>
                   </a>
                   <div className="group relative">
