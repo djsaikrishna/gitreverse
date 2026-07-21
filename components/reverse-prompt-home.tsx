@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { track } from "@vercel/analytics";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { CodeRabbitBanner } from "@/components/coderabbit-banner";
-import { AuthModal } from "@/components/auth/AuthModal";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,12 +15,6 @@ import {
 } from "@/lib/home-example-repos";
 import { parseGitHubRepoInput } from "@/lib/parse-github-repo";
 import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
-import { beginCreditCheckout, saveReturnPath } from "@/lib/stripe-checkout-navigate";
-import {
-  buildDefaultBillingStatus,
-  type BillingStatus,
-} from "@/lib/billing-config";
-import { fetchBillingStatus } from "@/lib/subscription-status-client";
 import {
   type HistoryEntry,
   historyPromptPreview,
@@ -32,75 +25,12 @@ import {
   writeLocalHistory,
 } from "@/lib/user-history";
 
-const PENDING_REDIRECT_KEY = "gr_pending_redirect";
-
-const PENDING_AUTH_KEY = "gr_pending_auth_action";
-
-type PendingAuthAction =
-  | { type: "deep"; repoUrl: string }
-  | { type: "manual"; repoUrl: string; focus: string };
-
-function savePendingAuth(action: PendingAuthAction): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(PENDING_AUTH_KEY, JSON.stringify(action));
-  } catch {
-    /* storage unavailable */
-  }
-}
-
-function clearPendingAuth(): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.removeItem(PENDING_AUTH_KEY);
-  } catch {
-    /* storage unavailable */
-  }
-}
-
-function historySlotFromProps(
-  preserveUrl: boolean,
-  autoSubmitDeep: boolean,
-  autoSubmitFocus: string | undefined,
-  initialManualFocus: string | undefined,
-  initialGenerationKind: "quick" | "deep" | "manual" | undefined
-): string {
-  if (preserveUrl) {
-    if (autoSubmitDeep || initialGenerationKind === "deep") return "deep";
-    const focus =
-      (autoSubmitFocus?.trim() || initialManualFocus?.trim()) ?? "";
-    if (initialGenerationKind === "manual" || focus) {
-      return `m:${focus}`;
-    }
-  }
-  return "quick";
-}
-
-function historySlotFromGenerationState(
-  kind: "quick" | "deep" | "manual" | null,
-  manualFocus: string | null
-): string | null {
-  if (kind == null) return null;
-  if (kind === "deep") return "deep";
-  if (kind === "manual") return `m:${manualFocus?.trim() ?? ""}`;
-  return "quick";
-}
-
 type ReversePromptHomeProps = {
   initialRepoInput?: string;
   autoSubmit?: boolean;
   initialPrompt?: string;
   owner?: string;
   repo?: string;
-  /** Auto-run Deep Reverse on mount (shareable `/owner/repo/deep`). */
-  autoSubmitDeep?: boolean;
-  /** Auto-run manual control with this focus on mount (shareable `/owner/repo/<focus>`). */
-  autoSubmitFocus?: string;
-  /** When true, do not rewrite the URL to `/:owner/:repo` after generation. */
-  preserveUrl?: boolean;
-  /** When SSR provides a cached prompt, record how it was produced for history. */
-  initialGenerationKind?: "quick" | "deep" | "manual";
-  initialManualFocus?: string;
   isHome?: boolean;
 };
 
@@ -110,125 +40,20 @@ export function ReversePromptHome({
   initialPrompt,
   owner,
   repo,
-  autoSubmitDeep = false,
-  autoSubmitFocus,
-  preserveUrl = false,
-  initialGenerationKind,
-  initialManualFocus,
   isHome = false,
 }: ReversePromptHomeProps) {
   const router = useRouter();
   const { isAuthenticated, session } = useAuth();
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [premiumUpsellFeature, setPremiumUpsellFeature] = useState<
-    "deep" | "manual" | null
-  >(null);
-
-  const openAuthModalWithPending = useCallback((action: PendingAuthAction) => {
-    setPremiumUpsellFeature(null);
-    savePendingAuth(action);
-    setShowAuthModal(true);
-  }, []);
-
-  const closeAuthModal = useCallback(() => {
-    clearPendingAuth();
-    setShowAuthModal(false);
-  }, []);
-
-  const openPremiumUpsell = useCallback((feature: "deep" | "manual") => {
-    clearPendingAuth();
-    setShowAuthModal(false);
-    setPremiumUpsellFeature(feature);
-  }, []);
-
-  const closePremiumUpsell = useCallback(() => {
-    setPremiumUpsellFeature(null);
-  }, []);
-
-  const goToPremium = useCallback(() => {
-    saveReturnPath();
-    void router.push("/premium");
-  }, [router]);
-
-  const initialFocus =
-    autoSubmitDeep
-      ? ""
-      : (autoSubmitFocus?.trim() || initialManualFocus?.trim()) ?? "";
   const [repoUrl, setRepoUrl] = useState(initialRepoInput);
   const [siteUrl, setSiteUrl] = useState("");
   const [homeMode, setHomeMode] = useState<"codebase" | "website">("codebase");
-  const [customReverse, setCustomReverse] = useState(Boolean(initialFocus));
-  const [customPrompt, setCustomPrompt] = useState(initialFocus);
-  /** Hides “Deep Reverse” after a custom or deep run (not needed for that result). */
-  const [lastResultWasCustom, setLastResultWasCustom] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
-  const [monthlyLimitReached, setMonthlyLimitReached] = useState(false);
-  const [limitErrorType, setLimitErrorType] = useState<
-    "monthly_limit_reached" | "daily_limit_reached" | null
-  >(null);
-  const [billingStatus, setBillingStatus] = useState<BillingStatus>(
-    buildDefaultBillingStatus()
-  );
-  const [subscriberHydrated, setSubscriberHydrated] = useState(false);
-  const [checkoutVerifyState, setCheckoutVerifyState] = useState<
-    "idle" | "verifying" | "still_processing"
-  >("idle");
-  const [creditCheckoutVerifyState, setCreditCheckoutVerifyState] = useState<
-    "idle" | "verifying" | "still_processing"
-  >("idle");
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [copied, setCopied] = useState(false);
-  /** Live line for manual/deep (SSE or cache); empty when idle. */
-  const [manualStatusLine, setManualStatusLine] = useState("");
-  /**
-   * Which request is in flight. Deep Reverse uses `runCustomReverse` without
-   * the Manual control checkbox, so we cannot key off `customReverse` alone.
-   */
-  const [loadKind, setLoadKind] = useState<"none" | "quick" | "custom">("none");
-  const [lastGenerationKind, setLastGenerationKind] = useState<
-    "quick" | "deep" | "manual" | null
-  >(() => initialGenerationKind ?? null);
-  const [lastManualFocus, setLastManualFocus] = useState<string | null>(() =>
-    initialManualFocus?.trim() ? initialManualFocus.trim() : null
-  );
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const autoSubmitStartedRef = useRef(false);
-  const isSubscriber = billingStatus.subscribed;
-  const creditBalance = billingStatus.credits.balance;
-  const canUseDeep = billingStatus.deepReverse.canUse;
-  const canUseManual = billingStatus.manualControl.canUse;
-  const limitTitle =
-    limitErrorType === "daily_limit_reached"
-      ? "You’ve hit today’s safety limit."
-      : "You’re out of credits.";
-  const limitCtaLabel = "Buy credits — $1/reverse";
-
-  const buyCredits = useCallback(() => {
-    if (!isAuthenticated) {
-      setShowAuthModal(true);
-      return;
-    }
-    setError(null);
-    void beginCreditCheckout(session?.access_token).catch(() => {
-      setError("Checkout unavailable. Try again in a moment.");
-    });
-  }, [isAuthenticated, session?.access_token]);
-
-  const refreshBillingStatus = useCallback(async () => {
-    const token = session?.access_token;
-    if (!token) {
-      setBillingStatus(buildDefaultBillingStatus());
-      return;
-    }
-    try {
-      const status = await fetchBillingStatus(token);
-      setBillingStatus(status);
-    } catch {
-      setBillingStatus(buildDefaultBillingStatus());
-    }
-  }, [session?.access_token]);
 
   /** Home: honor `?mode=website` for shareable website-reverse entry. */
   useEffect(() => {
@@ -239,152 +64,11 @@ export function ReversePromptHome({
     }
   }, [isHome]);
 
-  /** Open Manual control and fill the focus when the URL (or SSR) carries a manual focus segment. */
-  useEffect(() => {
-    if (autoSubmitDeep) {
-      setCustomReverse(false);
-      return;
-    }
-    const focus =
-      (autoSubmitFocus?.trim() || initialManualFocus?.trim()) ?? "";
-    if (!initialRepoInput?.trim()) {
-      if (focus) {
-        setCustomReverse(true);
-        setCustomPrompt(focus);
-      }
-      return;
-    }
-    if (focus) {
-      setCustomReverse(true);
-      setCustomPrompt(focus);
-    } else {
-      setCustomReverse(false);
-    }
-  }, [autoSubmitDeep, autoSubmitFocus, initialManualFocus, initialRepoInput]);
-
-  /** Stripe checkout return + Premium status from logged-in user. */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    let cancelled = false;
-
-    async function hydrateSubscriber() {
-      const params = new URLSearchParams(window.location.search);
-      const creditSessionId = params.get("credit_session_id")?.trim();
-      const sessionId = params.get("session_id")?.trim();
-      const token = session?.access_token;
-
-      if (!sessionId && !creditSessionId) {
-        localStorage.removeItem(PENDING_REDIRECT_KEY);
-      }
-
-      if (creditSessionId) {
-        if (!token) {
-          if (!cancelled) setSubscriberHydrated(true);
-          return;
-        }
-        setCreditCheckoutVerifyState("verifying");
-        try {
-          const res = await fetch(
-            `/api/verify-credit-purchase?session_id=${encodeURIComponent(creditSessionId)}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          const data = (await res.json()) as BillingStatus & {
-            reconciled?: boolean;
-            error?: string;
-          };
-          if (cancelled) return;
-          if (res.ok && data.reconciled === true) {
-            setBillingStatus(data);
-            setMonthlyLimitReached(false);
-            setLimitErrorType(null);
-            setPremiumUpsellFeature(null);
-            setCreditCheckoutVerifyState("idle");
-            const pendingRedirect = localStorage.getItem(PENDING_REDIRECT_KEY);
-            localStorage.removeItem(PENDING_REDIRECT_KEY);
-            if (pendingRedirect) {
-              void router.push(pendingRedirect);
-            } else {
-              window.history.replaceState(null, "", window.location.pathname);
-            }
-          } else {
-            setCreditCheckoutVerifyState("still_processing");
-          }
-        } catch {
-          if (!cancelled) setCreditCheckoutVerifyState("still_processing");
-        }
-        if (!cancelled) setSubscriberHydrated(true);
-        return;
-      }
-
-      if (sessionId) {
-        setCheckoutVerifyState("verifying");
-        try {
-          const headers: Record<string, string> = {};
-          if (token) headers.Authorization = `Bearer ${token}`;
-          const res = await fetch(
-            `/api/verify-subscription?session_id=${encodeURIComponent(sessionId)}`,
-            { headers }
-          );
-          const data = (await res.json()) as BillingStatus & {
-            email?: string;
-            error?: string;
-          };
-          if (cancelled) return;
-          if (res.ok && data.subscribed === true) {
-            setBillingStatus(data);
-            setMonthlyLimitReached(false);
-            setLimitErrorType(null);
-            setCheckoutVerifyState("idle");
-            const pendingRedirect = localStorage.getItem(PENDING_REDIRECT_KEY);
-            localStorage.removeItem(PENDING_REDIRECT_KEY);
-            if (pendingRedirect) {
-              void router.push(pendingRedirect);
-            } else {
-              window.history.replaceState(null, "", window.location.pathname);
-            }
-          } else {
-            setCheckoutVerifyState("still_processing");
-          }
-        } catch {
-          if (!cancelled) setCheckoutVerifyState("still_processing");
-        }
-        if (!cancelled) setSubscriberHydrated(true);
-        return;
-      }
-
-      if (token) {
-        try {
-          const status = await fetchBillingStatus(token);
-          if (!cancelled) setBillingStatus(status);
-        } catch {
-          if (!cancelled) setBillingStatus(buildDefaultBillingStatus());
-        }
-      } else if (!cancelled) {
-        setBillingStatus(buildDefaultBillingStatus());
-      }
-
-      if (!cancelled) setSubscriberHydrated(true);
-    }
-
-    void hydrateSubscriber();
-    return () => {
-      cancelled = true;
-    };
-  }, [router, session?.access_token]);
-
-  /** Close auth modal after successful sign-in (popup flow). */
-  useEffect(() => {
-    if (isAuthenticated && showAuthModal) {
-      setShowAuthModal(false);
-    }
-  }, [isAuthenticated, showAuthModal]);
-
   const runReversePrompt = useCallback(async (input: string) => {
     setError(null);
     setRateLimited(false);
     setPrompt("");
     setCopied(false);
-    setLoadKind("quick");
     setLoading(true);
     try {
       const res = await fetch("/api/reverse-prompt", {
@@ -406,11 +90,8 @@ export function ReversePromptHome({
       }
       if (typeof data.prompt === "string") {
         setPrompt(data.prompt);
-        setLastResultWasCustom(false);
-        setLastGenerationKind("quick");
-        setLastManualFocus(null);
         const parsed = parseGitHubRepoInput(input);
-        if (parsed && typeof window !== "undefined" && !preserveUrl) {
+        if (parsed && typeof window !== "undefined") {
           window.history.replaceState(
             null,
             "",
@@ -424,319 +105,12 @@ export function ReversePromptHome({
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setLoading(false);
-      setLoadKind("none");
     }
-  }, [preserveUrl]);
-
-  const runCustomReverse = useCallback(
-    async (input: string, focusOrDeep: string | { mode: "deep" }) => {
-      setError(null);
-      setRateLimited(false);
-      setMonthlyLimitReached(false);
-      setLimitErrorType(null);
-      setPremiumUpsellFeature(null);
-      setPrompt("");
-      setCopied(false);
-      const isDeep =
-        typeof focusOrDeep === "object" && focusOrDeep.mode === "deep";
-      setManualStatusLine("Checking if it's cached…");
-      setLoadKind("custom");
-      setLoading(true);
-      try {
-        const bodyObj = isDeep
-          ? { repoUrl: input, mode: "deep" as const, stream: true as const }
-          : {
-              repoUrl: input,
-              customPrompt: focusOrDeep as string,
-              stream: true as const,
-            };
-
-        const res = await fetch("/api/custom-reverse", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(session?.access_token
-              ? { Authorization: `Bearer ${session.access_token}` }
-              : {}),
-          },
-          body: JSON.stringify(bodyObj),
-        });
-
-        const ct = res.headers.get("content-type") ?? "";
-
-        if (ct.includes("application/json")) {
-          const data = (await res.json()) as {
-            prompt?: string;
-            error?: string;
-            fromCache?: boolean;
-          };
-          if (!res.ok) {
-            if (res.status === 429 || res.status === 403) {
-              const limitErr =
-                data.error === "monthly_limit_reached" ||
-                data.error === "daily_limit_reached" ||
-                data.error === "out_of_credits";
-              if (limitErr) {
-                setMonthlyLimitReached(true);
-                setLimitErrorType(
-                  data.error === "daily_limit_reached"
-                    ? "daily_limit_reached"
-                    : data.error === "out_of_credits"
-                      ? null
-                      : "monthly_limit_reached"
-                );
-                void refreshBillingStatus();
-              } else if (data.error === "premium_required") {
-                if (!isAuthenticated) {
-                  openAuthModalWithPending(
-                    isDeep
-                      ? { type: "deep", repoUrl: input }
-                      : {
-                          type: "manual",
-                          repoUrl: input,
-                          focus: String(focusOrDeep as string).trim(),
-                        }
-                  );
-                } else {
-                  openPremiumUpsell(isDeep ? "deep" : "manual");
-                }
-              } else {
-                setRateLimited(true);
-              }
-              return;
-            }
-            setError(data.error ?? `Request failed (${res.status})`);
-            return;
-          }
-          if (typeof data.prompt === "string") {
-            if (data.fromCache) {
-              setManualStatusLine("Loaded from cache");
-              await new Promise((r) => setTimeout(r, 450));
-            } else {
-              void refreshBillingStatus();
-            }
-            setPrompt(data.prompt);
-            setLastResultWasCustom(true);
-            if (isDeep) {
-              setLastGenerationKind("deep");
-              setLastManualFocus(null);
-            } else {
-              setLastGenerationKind("manual");
-              setLastManualFocus(String(focusOrDeep as string).trim());
-            }
-            const parsed = parseGitHubRepoInput(input);
-            if (parsed && typeof window !== "undefined") {
-              if (!isDeep) {
-                const f = String(focusOrDeep as string).trim();
-                window.history.replaceState(
-                  null,
-                  "",
-                  f
-                    ? `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/${encodeURIComponent(f)}`
-                    : `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-                );
-              } else if (!preserveUrl) {
-                window.history.replaceState(
-                  null,
-                  "",
-                  `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-                );
-              }
-            }
-          } else {
-            setError("No prompt in response.");
-          }
-          return;
-        }
-
-        if (!res.ok) {
-          try {
-            const errData = (await res.json()) as { error?: string };
-            if (res.status === 429 || res.status === 403) {
-              const limitErr =
-                errData.error === "monthly_limit_reached" ||
-                errData.error === "daily_limit_reached" ||
-                errData.error === "out_of_credits";
-              if (limitErr) {
-                setMonthlyLimitReached(true);
-                setLimitErrorType(
-                  errData.error === "daily_limit_reached"
-                    ? "daily_limit_reached"
-                    : errData.error === "out_of_credits"
-                      ? null
-                      : "monthly_limit_reached"
-                );
-                void refreshBillingStatus();
-              } else if (errData.error === "premium_required") {
-                if (!isAuthenticated) {
-                  openAuthModalWithPending(
-                    isDeep
-                      ? { type: "deep", repoUrl: input }
-                      : {
-                          type: "manual",
-                          repoUrl: input,
-                          focus: String(focusOrDeep as string).trim(),
-                        }
-                  );
-                } else {
-                  openPremiumUpsell(isDeep ? "deep" : "manual");
-                }
-              } else {
-                setRateLimited(true);
-              }
-            } else {
-              setError(errData.error ?? `Request failed (${res.status})`);
-            }
-          } catch {
-            if (res.status === 429) {
-              setRateLimited(true);
-            } else {
-              setError(`Request failed (${res.status})`);
-            }
-          }
-          return;
-        }
-
-        if (!res.body) {
-          setError("No response body from manual control.");
-          return;
-        }
-
-        const reader = res.body.getReader();
-        const dec = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += dec.decode(value, { stream: true });
-          for (;;) {
-            const idx = buffer.indexOf("\n\n");
-            if (idx < 0) break;
-            const block = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 2);
-            let event = "message";
-            let dataStr = "";
-            for (const line of block.split("\n")) {
-              if (line.startsWith("event:")) {
-                event = line.slice(6).trim();
-              } else if (line.startsWith("data:")) {
-                dataStr = line.slice(5).trim();
-              }
-            }
-            if (!dataStr) continue;
-            try {
-              if (event === "status") {
-                const j = JSON.parse(dataStr) as { message?: string };
-                if (typeof j.message === "string" && j.message) {
-                  setManualStatusLine(j.message);
-                }
-              } else if (event === "done") {
-                const j = JSON.parse(dataStr) as { prompt?: string };
-                if (typeof j.prompt === "string") {
-                  void refreshBillingStatus();
-                  setPrompt(j.prompt);
-                  setLastResultWasCustom(true);
-                  if (isDeep) {
-                    setLastGenerationKind("deep");
-                    setLastManualFocus(null);
-                  } else {
-                    setLastGenerationKind("manual");
-                    setLastManualFocus(String(focusOrDeep as string).trim());
-                  }
-                  const parsed = parseGitHubRepoInput(input);
-                  if (parsed && typeof window !== "undefined") {
-                    if (!isDeep) {
-                      const f = String(focusOrDeep as string).trim();
-                      window.history.replaceState(
-                        null,
-                        "",
-                        f
-                          ? `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/${encodeURIComponent(f)}`
-                          : `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-                      );
-                    } else if (!preserveUrl) {
-                      window.history.replaceState(
-                        null,
-                        "",
-                        `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-                      );
-                    }
-                  }
-                } else {
-                  setError("No prompt in response.");
-                }
-              } else if (event === "error") {
-                const j = JSON.parse(dataStr) as { error?: string };
-                setError(j.error ?? "Request failed");
-              }
-            } catch {
-              // ignore malformed SSE chunk
-            }
-          }
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Request failed");
-      } finally {
-        setLoading(false);
-        setLoadKind("none");
-        setManualStatusLine("");
-      }
-    },
-    [
-      isAuthenticated,
-      openAuthModalWithPending,
-      openPremiumUpsell,
-      preserveUrl,
-      refreshBillingStatus,
-      session?.access_token,
-    ]
-  );
-
-  /** Resume Deep / Manual after GitHub popup sign-in (sessionStorage). */
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (!subscriberHydrated) return;
-    let raw: string | null = null;
-    try {
-      raw = sessionStorage.getItem(PENDING_AUTH_KEY);
-      if (!raw) return;
-      sessionStorage.removeItem(PENDING_AUTH_KEY);
-    } catch {
-      return;
-    }
-    let action: PendingAuthAction;
-    try {
-      action = JSON.parse(raw) as PendingAuthAction;
-    } catch {
-      return;
-    }
-    if (action.type === "deep") {
-      if (!canUseDeep) {
-        openPremiumUpsell("deep");
-        return;
-      }
-      void runCustomReverse(action.repoUrl, { mode: "deep" });
-    } else if (action.type === "manual") {
-      if (!canUseManual) {
-        openPremiumUpsell("manual");
-        return;
-      }
-      void runCustomReverse(action.repoUrl, action.focus);
-    }
-  }, [
-    isAuthenticated,
-    openPremiumUpsell,
-    subscriberHydrated,
-    canUseDeep,
-    canUseManual,
-    runCustomReverse,
-  ]);
+  }, []);
 
   function setHomeModeAndUrl(next: "codebase" | "website") {
     setHomeMode(next);
     setError(null);
-    setCustomReverse(false);
     if (typeof window === "undefined" || !isHome) return;
     const url = new URL(window.location.href);
     if (next === "website") {
@@ -753,7 +127,8 @@ export function ReversePromptHome({
 
     if (isHome && homeMode === "website") {
       const siteRaw = siteUrl.trim();
-      const isGitHubUrl = /^(https?:\/\/)?(www\.)?github\.com\/.+\/.+/i.test(siteRaw) ||
+      const isGitHubUrl =
+        /^(https?:\/\/)?(www\.)?github\.com\/.+\/.+/i.test(siteRaw) ||
         /^github\.com\/.+\/.+/.test(siteRaw) ||
         (/^[^/\s]+\/[^/\s]+$/.test(siteRaw) && !siteRaw.includes("."));
       if (isGitHubUrl) {
@@ -779,12 +154,16 @@ export function ReversePromptHome({
     const trimmed = repoUrl.trim();
 
     if (!initialRepoInput?.trim()) {
-      const isNonGitHubWebUrl = /^https?:\/\//i.test(trimmed) && (() => {
-        try {
-          const h = new URL(trimmed).hostname.replace(/^www\./, "");
-          return h !== "github.com";
-        } catch { return false; }
-      })();
+      const isNonGitHubWebUrl =
+        /^https?:\/\//i.test(trimmed) &&
+        (() => {
+          try {
+            const h = new URL(trimmed).hostname.replace(/^www\./, "");
+            return h !== "github.com";
+          } catch {
+            return false;
+          }
+        })();
       if (isNonGitHubWebUrl) {
         setError(
           "That looks like a website URL. Switch to Website mode to reverse-engineer sites."
@@ -793,145 +172,29 @@ export function ReversePromptHome({
       }
       const parsed = parseGitHubRepoInput(trimmed);
       if (!parsed) {
-        setError("Could not parse GitHub repo. Use owner/repo or a github.com URL.");
+        setError(
+          "Could not parse GitHub repo. Use owner/repo or a github.com URL."
+        );
         return;
       }
-      if (customReverse) {
-        const focus = customPrompt.trim();
-        if (!isAuthenticated) {
-          openAuthModalWithPending({
-            type: "manual",
-            repoUrl: trimmed,
-            focus,
-          });
-          return;
-        }
-        if (!canUseManual) {
-          openPremiumUpsell("manual");
-          return;
-        }
-        void router.push(
-          focus
-            ? `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/${encodeURIComponent(focus)}`
-            : `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-        );
-      } else {
-        void router.push(
-          `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-        );
-      }
+      void router.push(
+        `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
+      );
       return;
     }
 
-    if (customReverse) {
-      const focus = customPrompt.trim();
-      if (!isAuthenticated) {
-        openAuthModalWithPending({
-          type: "manual",
-          repoUrl: trimmed,
-          focus,
-        });
-        return;
-      }
-      if (!canUseManual) {
-        openPremiumUpsell("manual");
-        return;
-      }
-      const parsed = parseGitHubRepoInput(trimmed);
-      if (parsed && typeof window !== "undefined") {
-        window.history.pushState(
-          null,
-          "",
-          focus
-            ? `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/${encodeURIComponent(focus)}`
-            : `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
-        );
-      }
-      void runCustomReverse(trimmed, focus);
-    } else {
-      void runReversePrompt(trimmed);
-    }
-  }
-
-  function onCustomReverseCheckboxChange(wantsOn: boolean) {
-    setCustomReverse(wantsOn);
+    void runReversePrompt(trimmed);
   }
 
   useEffect(() => {
-    if (!subscriberHydrated) return;
     if (autoSubmitStartedRef.current) return;
     const trimmed = initialRepoInput?.trim() ?? "";
     if (!trimmed || !parseGitHubRepoInput(trimmed)) return;
-
-    if (autoSubmitDeep) {
-      if (!isAuthenticated) {
-        openAuthModalWithPending({ type: "deep", repoUrl: trimmed });
-        return;
-      }
-      if (!canUseDeep) {
-        openPremiumUpsell("deep");
-        return;
-      }
-      autoSubmitStartedRef.current = true;
-      void runCustomReverse(trimmed, { mode: "deep" });
-      return;
-    }
-    const focus = autoSubmitFocus?.trim() ?? "";
-    if (focus) {
-      if (!isAuthenticated) {
-        openAuthModalWithPending({ type: "manual", repoUrl: trimmed, focus });
-        return;
-      }
-      if (!canUseManual) {
-        openPremiumUpsell("manual");
-        return;
-      }
-      autoSubmitStartedRef.current = true;
-      void runCustomReverse(trimmed, focus);
-      return;
-    }
     if (autoSubmit) {
       autoSubmitStartedRef.current = true;
       void runReversePrompt(trimmed);
     }
-  }, [
-    subscriberHydrated,
-    autoSubmit,
-    autoSubmitDeep,
-    autoSubmitFocus,
-    initialRepoInput,
-    isAuthenticated,
-    openAuthModalWithPending,
-    openPremiumUpsell,
-    runCustomReverse,
-    runReversePrompt,
-    canUseDeep,
-    canUseManual,
-  ]);
-
-  useEffect(() => {
-    if (!subscriberHydrated) return;
-    if (!preserveUrl || initialGenerationKind !== "deep") return;
-    const trimmed = initialRepoInput?.trim() ?? "";
-    if (!trimmed) return;
-    if (!isAuthenticated) {
-      openAuthModalWithPending({ type: "deep", repoUrl: trimmed });
-      return;
-    }
-    if (canUseDeep) return;
-    openPremiumUpsell("deep");
-  }, [
-    initialGenerationKind,
-    initialRepoInput,
-    isAuthenticated,
-    openAuthModalWithPending,
-    openPremiumUpsell,
-    preserveUrl,
-    subscriberHydrated,
-    canUseDeep,
-  ]);
-
-  /* `/owner/repo` uses quick auto-submit; `/owner/repo/deep` and `/owner/repo/<focus>` use the branches above. */
+  }, [autoSubmit, initialRepoInput, runReversePrompt]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -939,13 +202,12 @@ export function ReversePromptHome({
     const r = repo?.trim();
     if (!o || !r) return;
 
-    /* Server-side dedupes by IP hash, so we no longer need a localStorage gate. */
     void fetch("/api/increment-views", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ owner: o, repo: r }),
     }).catch(() => {
-      /* swallow — view counter is best-effort */
+      /* swallow ? view counter is best-effort */
     });
   }, [owner, repo]);
 
@@ -958,25 +220,11 @@ export function ReversePromptHome({
 
     const preview = historyPromptPreview(p);
     const arr: HistoryEntry[] = readLocalHistory();
-    const slot =
-      historySlotFromGenerationState(lastGenerationKind, lastManualFocus) ??
-      historySlotFromProps(
-        preserveUrl,
-        autoSubmitDeep,
-        autoSubmitFocus,
-        initialManualFocus,
-        initialGenerationKind
-      );
+    const slot = "quick";
 
     const idx = arr.findIndex(
       (e) => e.owner === o && e.repo === r && historySlotOf(e) === slot
     );
-
-    const gen = lastGenerationKind ?? undefined;
-    const focusMeta =
-      lastGenerationKind === "manual" && lastManualFocus?.trim()
-        ? lastManualFocus.trim()
-        : undefined;
 
     let entry: HistoryEntry;
 
@@ -987,25 +235,22 @@ export function ReversePromptHome({
         historySlot: slot,
         visitedAt: new Date().toISOString(),
         promptPreview: preview,
-        ...(gen != null ? { lastGenerationType: gen } : {}),
-        lastManualFocus: focusMeta,
+        lastGenerationType: "quick",
       };
       arr.unshift(entry);
       writeLocalHistory(arr);
     } else {
       const cur = arr[idx];
       const samePreview = cur.promptPreview === preview;
-      const sameGen = cur.lastGenerationType === gen;
-      const sameFocus = cur.lastManualFocus === focusMeta;
-      if (samePreview && sameGen && sameFocus) return;
+      const sameGen = cur.lastGenerationType === "quick";
+      if (samePreview && sameGen) return;
 
       entry = {
         ...cur,
         historySlot: slot,
         visitedAt: new Date().toISOString(),
         promptPreview: preview,
-        ...(gen != null ? { lastGenerationType: gen } : {}),
-        lastManualFocus: focusMeta,
+        lastGenerationType: "quick",
       };
       arr[idx] = entry;
       writeLocalHistory(arr);
@@ -1015,19 +260,7 @@ export function ReversePromptHome({
     if (token) {
       void syncHistoryEntry(token, entry).catch(() => {});
     }
-  }, [
-    owner,
-    repo,
-    prompt,
-    lastGenerationKind,
-    lastManualFocus,
-    preserveUrl,
-    autoSubmitDeep,
-    autoSubmitFocus,
-    initialManualFocus,
-    initialGenerationKind,
-    session?.access_token,
-  ]);
+  }, [owner, repo, prompt, session?.access_token]);
 
   const historyMigratedRef = useRef(false);
   useEffect(() => {
@@ -1061,139 +294,9 @@ export function ReversePromptHome({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FFFDF8] text-zinc-900">
-      <Navbar isSubscriber={isSubscriber} creditBalance={creditBalance} />
+      <Navbar />
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center gap-12 px-4 py-12 sm:px-6">
-        {checkoutVerifyState === "verifying" ? (
-          <div
-            className="w-full max-w-2xl rounded-lg border-[3px] border-zinc-400 bg-zinc-50 p-4 text-center text-sm text-zinc-800"
-            role="status"
-            aria-live="polite"
-          >
-            Confirming your subscription…
-          </div>
-        ) : null}
-        {checkoutVerifyState === "still_processing" ? (
-          <div
-            className="w-full max-w-2xl rounded-lg border-[3px] border-amber-400 bg-amber-50 p-4"
-            role="alert"
-          >
-            <p className="text-sm font-semibold text-amber-900">
-              Payment is still syncing
-            </p>
-            <p className="mt-2 text-sm text-amber-800">
-              Wait a few seconds and retry — we link your subscription to your
-              account as soon as Stripe syncs.
-            </p>
-            <button
-              type="button"
-              onClick={async () => {
-                const sid = new URLSearchParams(window.location.search)
-                  .get("session_id")
-                  ?.trim();
-                if (!sid) return;
-                setCheckoutVerifyState("verifying");
-                try {
-                  const headers: Record<string, string> = {};
-                  if (session?.access_token) {
-                    headers.Authorization = `Bearer ${session.access_token}`;
-                  }
-                  const res = await fetch(
-                    `/api/verify-subscription?session_id=${encodeURIComponent(sid)}`,
-                    { headers }
-                  );
-                  const data = (await res.json()) as BillingStatus & {
-                    email?: string;
-                  };
-                  if (res.ok && data.subscribed === true) {
-                    setBillingStatus(data);
-                    setMonthlyLimitReached(false);
-                    setLimitErrorType(null);
-                    setCheckoutVerifyState("idle");
-                    const pendingRedirect = localStorage.getItem(
-                      PENDING_REDIRECT_KEY
-                    );
-                    localStorage.removeItem(PENDING_REDIRECT_KEY);
-                    if (pendingRedirect) {
-                      void router.push(pendingRedirect);
-                    } else {
-                      window.history.replaceState(
-                        null,
-                        "",
-                        window.location.pathname
-                      );
-                    }
-                  } else {
-                    setCheckoutVerifyState("still_processing");
-                  }
-                } catch {
-                  setCheckoutVerifyState("still_processing");
-                }
-              }}
-              className="mt-3 rounded border-[2px] border-amber-700 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
-            >
-              Retry
-            </button>
-          </div>
-        ) : null}
-        {creditCheckoutVerifyState === "verifying" ? (
-          <div
-            className="w-full max-w-2xl rounded-lg border-[3px] border-zinc-400 bg-zinc-50 p-4 text-center text-sm text-zinc-800"
-            role="status"
-            aria-live="polite"
-          >
-            Confirming your credits…
-          </div>
-        ) : null}
-        {creditCheckoutVerifyState === "still_processing" ? (
-          <div
-            className="w-full max-w-2xl rounded-lg border-[3px] border-amber-400 bg-amber-50 p-4"
-            role="alert"
-          >
-            <p className="text-sm font-semibold text-amber-900">
-              Payment is still syncing
-            </p>
-            <p className="mt-2 text-sm text-amber-800">
-              Wait a few seconds and retry — we add credits as soon as Stripe
-              syncs.
-            </p>
-            <button
-              type="button"
-              onClick={async () => {
-                const sid = new URLSearchParams(window.location.search)
-                  .get("credit_session_id")
-                  ?.trim();
-                if (!sid || !session?.access_token) return;
-                setCreditCheckoutVerifyState("verifying");
-                try {
-                  const res = await fetch(
-                    `/api/verify-credit-purchase?session_id=${encodeURIComponent(sid)}`,
-                    {
-                      headers: { Authorization: `Bearer ${session.access_token}` },
-                    }
-                  );
-                  const data = (await res.json()) as BillingStatus & {
-                    reconciled?: boolean;
-                  };
-                  if (res.ok && data.reconciled === true) {
-                    setBillingStatus(data);
-                    setMonthlyLimitReached(false);
-                    setLimitErrorType(null);
-                    setCreditCheckoutVerifyState("idle");
-                    window.history.replaceState(null, "", window.location.pathname);
-                  } else {
-                    setCreditCheckoutVerifyState("still_processing");
-                  }
-                } catch {
-                  setCreditCheckoutVerifyState("still_processing");
-                }
-              }}
-              className="mt-3 rounded border-[2px] border-amber-700 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
-            >
-              Retry
-            </button>
-          </div>
-        ) : null}
         <div className="flex w-full flex-col items-center gap-6">
           {isHome ? (
             <div className="relative flex w-full flex-col items-center text-center">
@@ -1207,7 +310,7 @@ export function ReversePromptHome({
               </p>
             </div>
           ) : owner && repo ? (
-            <h1 className="sr-only">{`${owner}/${repo} — reverse-engineered prompt`}</h1>
+            <h1 className="sr-only">{`${owner}/${repo} ? reverse-engineered prompt`}</h1>
           ) : null}
 
           {isHome ? (
@@ -1248,289 +351,175 @@ export function ReversePromptHome({
           ) : null}
 
           <div className="flex w-full max-w-2xl flex-col gap-3">
-          <div className="relative w-full">
-            <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900" />
-            <form
-              onSubmit={onSubmit}
-              className="relative z-10 rounded-xl border-[3px] border-zinc-900 bg-[#fff4da] p-6"
-            >
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                  <div className="relative min-w-0 flex-1">
-                    <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-900" />
-                    {isHome && homeMode === "website" ? (
-                      <input
-                        name="siteUrl"
-                        autoComplete="off"
-                        className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
-                        placeholder="https://…"
-                        value={siteUrl}
-                        onChange={(e) => setSiteUrl(e.target.value)}
-                        required
-                      />
-                    ) : (
-                      <input
-                        name="repoUrl"
-                        autoComplete="off"
-                        className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
-                        placeholder="https://github.com/…"
-                        value={repoUrl}
-                        onChange={(e) => setRepoUrl(e.target.value)}
-                        required
-                      />
-                    )}
-                  </div>
-                  <div className="group relative w-full shrink-0 sm:w-auto">
-                    <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-800" />
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      aria-busy={loading}
-                      className={`relative z-10 flex w-full items-center justify-center gap-2 rounded border-[3px] border-zinc-900 px-6 py-3 font-medium text-white transition-transform group-hover:-translate-x-px group-hover:-translate-y-px disabled:pointer-events-none sm:min-w-[10rem] ${
-                        loading ? "bg-[#b5120e]" : "bg-[#d31611]"
-                      }`}
-                    >
-                      {loading ? (
-                        <>
-                          <svg
-                            className="h-5 w-5 shrink-0 animate-spin text-white"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            aria-hidden
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                          </svg>
-                          <span>Processing…</span>
-                        </>
-                      ) : (
-                        "Get Prompt"
-                      )}
-                    </button>
-                  </div>
-                </div>
-                {!isHome ? (
-                <div className="flex w-full flex-col gap-2">
-                  <label
-                    className={`flex items-center gap-2 text-sm font-medium ${
-                      loading
-                        ? "cursor-not-allowed text-zinc-500"
-                        : "cursor-pointer text-zinc-800"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-[2px] border-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
-                      checked={customReverse}
-                      disabled={loading}
-                      onChange={(e) =>
-                        onCustomReverseCheckboxChange(e.target.checked)
-                      }
-                    />
-                    Manual control
-                  </label>
-                  {customReverse ? (
-                    <div className="relative w-full">
+            <div className="relative w-full">
+              <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900" />
+              <form
+                onSubmit={onSubmit}
+                className="relative z-10 rounded-xl border-[3px] border-zinc-900 bg-[#fff4da] p-6"
+              >
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                    <div className="relative min-w-0 flex-1">
                       <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-900" />
-                      <textarea
-                        name="customPrompt"
-                        rows={4}
-                        className="relative z-10 w-full resize-y rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:opacity-80"
-                        placeholder="repurpose into your own version, or focus on a specific feature"
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        required={customReverse}
-                        disabled={loading}
-                      />
+                      {isHome && homeMode === "website" ? (
+                        <input
+                          name="siteUrl"
+                          autoComplete="off"
+                          className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
+                          placeholder="https://?"
+                          value={siteUrl}
+                          onChange={(e) => setSiteUrl(e.target.value)}
+                          required
+                        />
+                      ) : (
+                        <input
+                          name="repoUrl"
+                          autoComplete="off"
+                          className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
+                          placeholder="https://github.com/?"
+                          value={repoUrl}
+                          onChange={(e) => setRepoUrl(e.target.value)}
+                          required
+                        />
+                      )}
                     </div>
-                  ) : null}
+                    <div className="group relative w-full shrink-0 sm:w-auto">
+                      <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-800" />
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        aria-busy={loading}
+                        className={`relative z-10 flex w-full items-center justify-center gap-2 rounded border-[3px] border-zinc-900 px-6 py-3 font-medium text-white transition-transform group-hover:-translate-x-px group-hover:-translate-y-px disabled:pointer-events-none sm:min-w-[10rem] ${
+                          loading ? "bg-[#b5120e]" : "bg-[#d31611]"
+                        }`}
+                      >
+                        {loading ? (
+                          <>
+                            <svg
+                              className="h-5 w-5 shrink-0 animate-spin text-white"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              aria-hidden
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
+                            </svg>
+                            <span>Processing?</span>
+                          </>
+                        ) : (
+                          "Get Prompt"
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                ) : null}
-              </div>
 
-              {loading ? (
-                <div className="mt-4">
-                  {loadKind === "custom" ? (
-                    <p
-                      className="min-h-[1.25rem] text-sm text-zinc-600"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      {manualStatusLine}
-                    </p>
-                  ) : (
+                {loading ? (
+                  <div className="mt-4">
                     <ReverseGenerationFlavorText />
-                  )}
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
 
-              {monthlyLimitReached ? (
-                <div
-                  className="mt-4 rounded-lg border-[3px] border-zinc-400 bg-zinc-100 p-4"
-                  role="alert"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {limitTitle}
+                {rateLimited ? (
+                  <div
+                    className="mt-4 rounded-lg border-[3px] border-amber-400 bg-amber-50 p-4"
+                    role="alert"
+                  >
+                    <p className="font-semibold text-amber-900">
+                      Sorry, we&apos;re a bit overwhelmed right now.
                     </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {limitCtaLabel ? (
-                        <button
-                          type="button"
-                          onClick={() => void buyCredits()}
-                          className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
-                        >
-                          {limitCtaLabel}
-                        </button>
-                      ) : null}
-                      {!isSubscriber ? (
-                        <Link
-                          href="/premium"
-                          onClick={saveReturnPath}
-                          className="inline-flex items-center justify-center rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
-                        >
-                          Subscribe — $9/mo
-                        </Link>
-                      ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <p className="w-full text-sm text-amber-800">
+                        Come back in a couple of hours, or check out what others
+                        have already generated:
+                      </p>
                       <Link
                         href="/library"
-                        className="inline-flex items-center justify-center rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
+                        className="inline-flex items-center justify-center rounded border-[2px] border-amber-600 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-200"
                       >
-                        Browse Library
+                        Browse the library
                       </Link>
                     </div>
                   </div>
-                </div>
-              ) : rateLimited ? (
-                <div className="mt-4 rounded-lg border-[3px] border-amber-400 bg-amber-50 p-4" role="alert">
-                  <p className="font-semibold text-amber-900">Sorry, we&apos;re a bit overwhelmed right now.</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <p className="w-full text-sm text-amber-800">Come back in a couple of hours, or check out what others have already generated:</p>
-                    <Link
-                      href="/library"
-                      className="inline-flex items-center justify-center rounded border-[2px] border-amber-600 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-200"
-                    >
-                      Browse the library
-                    </Link>
-                  </div>
-                </div>
-              ) : error ? (
-                <p className="mt-3 text-sm text-red-600" role="alert">
-                  {error}
-                </p>
-              ) : premiumUpsellFeature ? (
-                <div
-                  className="mt-4 rounded-lg border-[3px] border-zinc-900 bg-[#fff4da] p-4"
-                  role="alert"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {premiumUpsellFeature === "deep"
-                        ? "You’re out of credits for Deep Reverse."
-                        : "You’re out of credits for Manual control."}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void buyCredits()}
-                        className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-[#ffbd5c]"
-                      >
-                        Buy credits — $1/reverse
-                      </button>
-                      {!isSubscriber ? (
-                        <button
-                          type="button"
-                          onClick={goToPremium}
-                          className="inline-flex items-center justify-center rounded border-[2px] border-zinc-900 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
-                        >
-                          Subscribe — $9/mo
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={closePremiumUpsell}
-                        className="inline-flex items-center justify-center rounded border-[2px] border-zinc-400 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
-                      >
-                        Maybe later
-                      </button>
+                ) : error ? (
+                  <p className="mt-3 text-sm text-red-600" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+                {isHome && !loading ? (
+                  <div className="mt-4 flex flex-col gap-4">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="w-full text-sm text-zinc-600">
+                        {homeMode === "website"
+                          ? "Try example websites:"
+                          : "Try example repos:"}
+                      </span>
+                      {(homeMode === "website"
+                        ? HOME_WEBSITE_EXAMPLES
+                        : HOME_EXAMPLES
+                      ).map(({ label, url }) => (
+                        <div key={url} className="group relative">
+                          <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (homeMode === "website") setSiteUrl(url);
+                              else setRepoUrl(url);
+                            }}
+                            className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#EBDBB7] px-3 py-1 text-sm font-medium text-zinc-900 transition-transform hover:bg-[#ffc480] group-hover:-translate-x-px group-hover:-translate-y-px"
+                          >
+                            {label}
+                          </button>
+                        </div>
+                      ))}
                     </div>
+                    <CodeRabbitBanner embedded />
                   </div>
-                </div>
-              ) : null}
-              {isHome && !loading ? (
-                <div className="mt-4 flex flex-col gap-4">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="w-full text-sm text-zinc-600">
-                      {homeMode === "website"
-                        ? "Try example websites:"
-                        : "Try example repos:"}
-                    </span>
-                    {(homeMode === "website"
-                      ? HOME_WEBSITE_EXAMPLES
-                      : HOME_EXAMPLES
-                    ).map(({ label, url }) => (
-                      <div key={url} className="group relative">
-                        <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (homeMode === "website") setSiteUrl(url);
-                            else setRepoUrl(url);
-                          }}
-                          className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#EBDBB7] px-3 py-1 text-sm font-medium text-zinc-900 transition-transform hover:bg-[#ffc480] group-hover:-translate-x-px group-hover:-translate-y-px"
-                        >
-                          {label}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <CodeRabbitBanner embedded />
-                </div>
-              ) : null}
-            </form>
-          </div>
-          {!isHome ? <CodeRabbitBanner className="w-full" /> : null}
-          {isHome ? (
-            <p className="text-center text-sm text-zinc-500">
-              {homeMode === "codebase" ? (
-                <>
-                  Also works: replace{" "}
-                  <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
-                    hub
-                  </code>{" "}
-                  with{" "}
-                  <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
-                    reverse
-                  </code>{" "}
-                  in any GitHub URL.
-                </>
-              ) : (
-                <>
-                  Also works:{" "}
-                  <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
-                    pinterest.gitreverse.com
-                  </code>{" "}
-                  style hostnames.
-                </>
-              )}
-            </p>
-          ) : null}
+                ) : null}
+              </form>
+            </div>
+            {!isHome ? <CodeRabbitBanner className="w-full" /> : null}
+            {isHome ? (
+              <p className="text-center text-sm text-zinc-500">
+                {homeMode === "codebase" ? (
+                  <>
+                    Also works: replace{" "}
+                    <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
+                      hub
+                    </code>{" "}
+                    with{" "}
+                    <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
+                      reverse
+                    </code>{" "}
+                    in any GitHub URL.
+                  </>
+                ) : (
+                  <>
+                    Also works:{" "}
+                    <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs text-zinc-700">
+                      pinterest.gitreverse.com
+                    </code>{" "}
+                    style hostnames.
+                  </>
+                )}
+              </p>
+            ) : null}
           </div>
         </div>
 
-        {prompt && !premiumUpsellFeature ? (
+        {prompt ? (
           <div
             ref={resultsRef}
             data-results
@@ -1548,7 +537,9 @@ export function ReversePromptHome({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Design this with make.design"
-                    onClick={() => track("Design This Click", { destination: "make.design" })}
+                    onClick={() =>
+                      track("Design This Click", { destination: "make.design" })
+                    }
                     className="group/design relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
                     <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/design:translate-x-px group-hover/design:translate-y-px" />
@@ -1571,25 +562,65 @@ export function ReversePromptHome({
               <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
                 <ReactMarkdown
                   components={{
-                    h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold first:mt-0">{children}</h1>,
-                    h2: ({ children }) => <h2 className="mb-2 mt-4 text-sm font-bold first:mt-0">{children}</h2>,
-                    h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-semibold first:mt-0">{children}</h3>,
-                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-0.5">{children}</ul>,
-                    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-0.5">{children}</ol>,
-                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                    em: ({ children }) => <em className="italic">{children}</em>,
-                    code: ({ children }) => <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs">{children}</code>,
-                    pre: ({ children }) => <pre className="mb-2 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs">{children}</pre>,
+                    h1: ({ children }) => (
+                      <h1 className="mb-2 mt-4 text-base font-bold first:mt-0">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="mb-2 mt-4 text-sm font-bold first:mt-0">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 className="mb-1 mt-3 text-sm font-semibold first:mt-0">
+                        {children}
+                      </h3>
+                    ),
+                    p: ({ children }) => (
+                      <p className="mb-2 last:mb-0">{children}</p>
+                    ),
+                    ul: ({ children }) => (
+                      <ul className="mb-2 ml-4 list-disc space-y-0.5">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="mb-2 ml-4 list-decimal space-y-0.5">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({ children }) => (
+                      <li className="leading-relaxed">{children}</li>
+                    ),
+                    strong: ({ children }) => (
+                      <strong className="font-semibold">{children}</strong>
+                    ),
+                    em: ({ children }) => (
+                      <em className="italic">{children}</em>
+                    ),
+                    code: ({ children }) => (
+                      <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs">
+                        {children}
+                      </code>
+                    ),
+                    pre: ({ children }) => (
+                      <pre className="mb-2 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs">
+                        {children}
+                      </pre>
+                    ),
                     hr: () => <hr className="my-3 border-zinc-200" />,
-                    blockquote: ({ children }) => <blockquote className="border-l-2 border-zinc-300 pl-3 text-zinc-600">{children}</blockquote>,
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-2 border-zinc-300 pl-3 text-zinc-600">
+                        {children}
+                      </blockquote>
+                    ),
                   }}
                 >
                   {prompt}
                 </ReactMarkdown>
               </div>
-              {!lastResultWasCustom && !loading ? (
+              {!loading ? (
                 <p className="mt-4 text-center text-sm text-zinc-600">
                   Have a live product UI?{" "}
                   <Link
@@ -1625,7 +656,7 @@ export function ReversePromptHome({
             GitHub
           </a>
           <span className="text-zinc-300" aria-hidden>
-            ·
+            ?
           </span>
           <a
             href="https://discord.gg/AYnCD68WCr"
@@ -1646,8 +677,6 @@ export function ReversePromptHome({
           </a>
         </div>
       </footer>
-
-      <AuthModal isOpen={showAuthModal} onClose={closeAuthModal} />
     </div>
   );
 }

@@ -103,7 +103,6 @@ export default async function RepoPage({ params }: PageProps) {
         initialPrompt={cachedPrompt}
         owner={owner}
         repo={repoNorm}
-        initialGenerationKind={cachedPrompt ? "quick" : undefined}
       />
     </>
   );
