@@ -3,6 +3,9 @@ import { parseWebsiteReverseHost } from "@/lib/parse-website-reverse-host";
 export function getSiteBaseUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, "");
+  // Stable production domain — never the per-deployment *.vercel.app hostname
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (prod) return `https://${prod.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
   const vercel = process.env.VERCEL_URL?.trim();
   if (vercel) return `https://${vercel.replace(/\/$/, "")}`;
   return "http://localhost:3000";
