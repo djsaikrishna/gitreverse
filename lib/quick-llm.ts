@@ -5,6 +5,7 @@ import {
   getAzureOpenAiBaseUrl,
   getAzureQuickModel,
   getAzureQuickReasoningEffort,
+  resolveAzureDeploymentName,
   type AzureOpenAiReasoningEffort,
 } from "@/lib/azure-openai";
 
@@ -270,6 +271,10 @@ export async function callQuickLlm(
           max_tokens: maxCompletionTokens,
         };
 
+  const deploymentLabel =
+    llm.provider === "azure" ? resolveAzureDeploymentName(llm.model) : llm.model;
+  const startedAt = Date.now();
+
   let res: Response;
   try {
     res = await fetch(llm.url, {
@@ -280,6 +285,9 @@ export async function callQuickLlm(
   } catch (e) {
     const label = providerDisplayName(llm.provider);
     const message = e instanceof Error ? e.message : `${label} request failed`;
+    console.log(
+      `[quick-llm] ${llm.provider}/${deploymentLabel} FAILED after ${Date.now() - startedAt}ms: ${message}`
+    );
     return { ok: false, error: `Generation failed: ${message}`, status: 500 };
   }
 
@@ -288,12 +296,24 @@ export async function callQuickLlm(
     data = await res.json();
   } catch {
     const label = providerDisplayName(llm.provider);
+    console.log(
+      `[quick-llm] ${llm.provider}/${deploymentLabel} invalid JSON after ${Date.now() - startedAt}ms`
+    );
     return {
       ok: false,
       error: `${label} returned invalid JSON.`,
       status: 502,
     };
   }
+
+  const elapsedMs = Date.now() - startedAt;
+  const usage =
+    data && typeof data === "object" && "usage" in data
+      ? (data as { usage?: Record<string, unknown> }).usage
+      : undefined;
+  console.log(
+    `[quick-llm] ${llm.provider}/${deploymentLabel} reasoning=${llm.reasoningEffort ?? "n/a"} status=${res.status} elapsed=${elapsedMs}ms usage=${JSON.stringify(usage ?? {})}`
+  );
 
   if (!res.ok) {
     const label = providerDisplayName(llm.provider);
