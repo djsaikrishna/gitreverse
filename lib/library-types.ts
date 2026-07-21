@@ -1,5 +1,7 @@
 export type LibraryEntryKind = "code" | "website";
 
+export type LibraryKindFilter = "all" | LibraryEntryKind;
+
 export type LibraryEntry = {
   kind: LibraryEntryKind;
   key: string;
