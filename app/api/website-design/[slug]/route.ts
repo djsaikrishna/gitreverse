@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const { slug: rawSlug } = await context.params;
   const slug = rawSlug.trim().toLowerCase();
 
@@ -22,13 +22,20 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     );
   }
 
+  const download = request.nextUrl.searchParams.has("download");
+  const headers: Record<string, string> = {
+    "Content-Type": "text/markdown; charset=utf-8",
+    "Cache-Control": "public, max-age=86400, s-maxage=86400",
+    "Access-Control-Allow-Origin": "*",
+  };
+  if (download) {
+    headers["Content-Disposition"] =
+      `attachment; filename="${slug}-design.md"`;
+  }
+
   return new NextResponse(designMd, {
     status: 200,
-    headers: {
-      "Content-Type": "text/markdown; charset=utf-8",
-      "Cache-Control": "public, max-age=86400, s-maxage=86400",
-      "Access-Control-Allow-Origin": "*",
-    },
+    headers,
   });
 }
 
