@@ -17,13 +17,6 @@ import {
 function historyHref(entry: HistoryEntry): string {
   const o = encodeURIComponent(entry.owner);
   const r = encodeURIComponent(entry.repo);
-  const slot = historySlotOf(entry);
-  if (slot === "deep") return `/${o}/${r}/deep`;
-  if (slot.startsWith("m:")) {
-    const focus = entry.lastManualFocus?.trim() || slot.slice(2);
-    if (!focus) return `/${o}/${r}`;
-    return `/${o}/${r}/${encodeURIComponent(focus)}`;
-  }
   return `/${o}/${r}`;
 }
 

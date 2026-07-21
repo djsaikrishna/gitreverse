@@ -50,24 +50,14 @@ If your Azure resource does not yet have an embedding deployment, you can tempor
 - **`SUPABASE_URL`** + **`SUPABASE_PUBLISHABLE_KEY`** — optional; enables server-side caching of quick prompts in `prompt_cache` and exposes the `/library` page.
 - **`VIEWS_IP_SALT`** — **required in production**. Generate one with `openssl rand -hex 32`. The app will refuse to start in production without a non-default value.
 
-### Custom reverse (optional)
-
-For **deep / focus** prompts, point the app at a backend service:
-
-```
-CUSTOM_REVERSE_SERVICE_URL=http://localhost:3001
-```
-
 ## Routes
 
 | Path | Description |
 |---|---|
-| `/` | Home — quick and custom reverse |
+| `/` | Home — quick reverse (codebase or website) |
 | `/library` | Browse cached quick prompts (requires Supabase) |
 | `/history` | Your prompt history (profile menu when signed in; syncs to Supabase) |
 | `/[owner]/[repo]` | Shareable quick-reverse link |
-| `/[owner]/[repo]/deep` | Shareable deep-reverse link |
-| `/[owner]/[repo]/[focus]` | Shareable manual-focus link |
 | `/[owner]/[repo]/tree/...` | Redirects to `/[owner]/[repo]` |
 
 ## Development

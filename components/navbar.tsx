@@ -196,7 +196,6 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
   const homeHref = useAppHref("/");
   const libraryHref = useAppHref("/library");
   const historyHref = useAppHref("/history");
-  const premiumHref = useAppHref("/premium");
   const {
     user,
     session,
@@ -434,27 +433,6 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
                         <IconClock />
                         History
                       </Link>
-                      {!isSubscriber ? (
-                        <Link
-                          href={premiumHref}
-                          role="menuitem"
-                          className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
-                          onClick={() => setMenuOpen(false)}
-                        >
-                          <IconPremiumBadge size={15} />
-                          Premium & credits
-                        </Link>
-                      ) : creditBalance === 0 ? (
-                        <Link
-                          href={premiumHref}
-                          role="menuitem"
-                          className="flex w-full items-center gap-2.5 border-b-2 border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
-                          onClick={() => setMenuOpen(false)}
-                        >
-                          <IconPremiumBadge size={15} />
-                          Buy credits
-                        </Link>
-                      ) : null}
                       {isSubscriber ? (
                         <button
                           type="button"
