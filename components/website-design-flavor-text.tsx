@@ -7,12 +7,12 @@ const FLAVOR_MS = 2400;
 
 /** Rotating filler copy shown while the design.md LLM call is in flight (the slow step). */
 const DESIGN_FLAVOR_LINES = [
-  "Extracting the color palette",
-  "Analyzing typography choices",
-  "Mapping the grid and layout system",
-  "Studying spacing and visual rhythm",
-  "Detecting recurring component patterns",
-  "Reading the brand voice and tone",
+  "extracting the colors",
+  "analyzing the fonts",
+  "mapping the layout system",
+  "extracting the content of the page",
+  "I need to make this faster",
+  "understanding brand voice",
   "Cataloging button and card styles",
   "Inspecting hover and motion cues",
   "Checking responsive breakpoints",

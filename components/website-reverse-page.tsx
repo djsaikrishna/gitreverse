@@ -7,7 +7,6 @@ import { Navbar } from "@/components/navbar";
 import { PromptMarkdown } from "@/components/prompt-markdown";
 import { WebsiteDesignFlavorText } from "@/components/website-design-flavor-text";
 import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
-import { useAppHref } from "@/lib/use-app-href";
 
 type WebsiteReversePageProps = {
   siteSlug: string;
@@ -27,7 +26,6 @@ export function WebsiteReversePage({
   targetUrl,
 }: WebsiteReversePageProps) {
   const router = useRouter();
-  const codebaseHomeHref = useAppHref("/");
 
   const [currentSlug, setCurrentSlug] = useState(siteSlug);
   const [currentTargetUrl, setCurrentTargetUrl] = useState(targetUrl);
@@ -284,7 +282,6 @@ export function WebsiteReversePage({
               ) : null}
             </form>
           </div>
-          <CodeRabbitBanner className="w-full" placement="website-card" />
         </div>
 
         {prompt ? (
@@ -324,15 +321,11 @@ export function WebsiteReversePage({
               <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
                 <PromptMarkdown>{prompt}</PromptMarkdown>
               </div>
-              <p className="mt-4 text-center text-sm text-zinc-600">
-                Want the engineering side?{" "}
-                <a
-                  href={codebaseHomeHref}
-                  className="font-bold text-zinc-900 underline decoration-zinc-400 underline-offset-2 transition-colors hover:decoration-zinc-900"
-                >
-                  Try codebase reversing
-                </a>
-              </p>
+              <CodeRabbitBanner
+                className="mt-4 w-full"
+                embedded
+                placement="website-card"
+              />
             </section>
           </div>
         ) : null}

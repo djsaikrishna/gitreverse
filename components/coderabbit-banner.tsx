@@ -10,12 +10,33 @@ type CodeRabbitBannerProps = {
   placement?: "home-card" | "repo-card" | "website-card";
 };
 
+const BANNER_COPY = {
+  default: {
+    title: "Cut code review time in half",
+    subtitle:
+      "CodeRabbit catches bugs before merge — free trial, 2-click install.",
+    variant: "default",
+  },
+  repo: {
+    title: "Are you gonna build this?",
+    subtitle: "make sure you review the code using coderabbit",
+    variant: "repo",
+  },
+} as const;
+
+function copyForPlacement(
+  placement: NonNullable<CodeRabbitBannerProps["placement"]>
+) {
+  return placement === "repo-card" ? BANNER_COPY.repo : BANNER_COPY.default;
+}
+
 export function CodeRabbitBanner({
   className,
   embedded = false,
   placement,
 }: CodeRabbitBannerProps) {
   const trackPlacement = placement ?? (embedded ? "home-card" : "repo-card");
+  const copy = copyForPlacement(trackPlacement);
   const content = (
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -31,10 +52,10 @@ export function CodeRabbitBanner({
         <p
           className={`font-semibold text-zinc-900 ${embedded ? "text-xs" : "text-sm"}`}
         >
-          Cut code review time in half
+          {copy.title}
         </p>
         <p className={`text-zinc-600 ${embedded ? "text-[11px]" : "text-xs"}`}>
-          CodeRabbit catches bugs before merge — free trial, 2-click install.
+          {copy.subtitle}
         </p>
       </div>
       <span
@@ -47,13 +68,19 @@ export function CodeRabbitBanner({
     </>
   );
 
+  const trackClick = () =>
+    track("CodeRabbit Click", {
+      placement: trackPlacement,
+      variant: copy.variant,
+    });
+
   if (embedded) {
     return (
       <a
         href={CODERABBIT_AFFILIATE_URL}
         target="_blank"
         rel="sponsored noopener noreferrer"
-        onClick={() => track("CodeRabbit Click", { placement: trackPlacement })}
+        onClick={trackClick}
         className={`group flex items-center gap-3 rounded-lg border-[2px] border-zinc-900/15 bg-white/70 px-3 py-2.5 transition-colors hover:bg-white ${className ?? ""}`}
       >
         {content}
@@ -67,7 +94,7 @@ export function CodeRabbitBanner({
       href={CODERABBIT_AFFILIATE_URL}
       target="_blank"
       rel="sponsored noopener noreferrer"
-      onClick={() => track("CodeRabbit Click", { placement: trackPlacement })}
+      onClick={trackClick}
       className={`group relative mt-4 block ${className ?? ""}`}
     >
       <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg bg-zinc-900" />
