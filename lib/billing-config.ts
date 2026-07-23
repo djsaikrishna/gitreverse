@@ -42,6 +42,7 @@ export const STRIPE_PRICE_IDS = {
   pro: "price_1TfvMRIBG5KwEK8aYeCaGRML",
   unlimited: "price_1TfvMRIBG5KwEK8a5aETT5X8",
   credit: "price_1Tq9A8IBG5KwEK8aYIUW1fVp",
+  partner: "price_1TwJ0DIBG5KwEK8ap7Eat9rn",
 } as const;
 
 /** Hardcoded in reconcile_user_credits migration SQL — keep in sync. */

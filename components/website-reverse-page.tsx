@@ -299,21 +299,21 @@ export function WebsiteReversePage({
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <a
-                    href={`https://make.design/?ref=fili&prompt=${encodeURIComponent(prompt)}`}
+                    href={`https://lovable.dev?prompt=${encodeURIComponent(prompt)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label="Design this with make.design"
+                    aria-label="Build this with Lovable"
                     onClick={() =>
-                      track("Design This Click", {
-                        destination: "make.design",
+                      track("Build This Click", {
+                        destination: "lovable.dev",
                         placement: "website-card",
                       })
                     }
-                    className="group/design relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
+                    className="group/build relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
-                    <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/design:translate-x-px group-hover/design:translate-y-px" />
-                    <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/design:bg-zinc-50">
-                      Design this
+                    <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/build:translate-x-px group-hover/build:translate-y-px" />
+                    <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/build:bg-zinc-50">
+                      Build this
                     </span>
                   </a>
                   <div className="group relative">
