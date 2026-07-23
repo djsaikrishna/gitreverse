@@ -1,5 +1,10 @@
 import ReactMarkdown from "react-markdown";
 
+/** Turn bare http(s) URLs into markdown links for display only. */
+function linkifyBareUrls(text: string): string {
+  return text.replace(/(?<!\]\()(https?:\/\/[^\s<>)]+)/g, (url) => `[${url}](${url})`);
+}
+
 export function PromptMarkdown({ children }: { children: string }) {
   return (
     <ReactMarkdown
@@ -53,7 +58,7 @@ export function PromptMarkdown({ children }: { children: string }) {
         ),
       }}
     >
-      {children}
+      {linkifyBareUrls(children)}
     </ReactMarkdown>
   );
 }
