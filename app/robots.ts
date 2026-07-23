@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/auth/", "/history"],
+        disallow: ["/api/", "/auth/", "/history", "/partner"],
       },
     ],
     sitemap: "https://gitreverse.com/sitemap.xml",
