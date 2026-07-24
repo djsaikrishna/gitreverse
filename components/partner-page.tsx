@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navbar } from "@/components/navbar";
 import { PartnerCheckoutForm } from "@/components/partner-checkout-form";
 import { PartnerScreenshots } from "@/components/partner-screenshots";
+import { PartnerTestSection } from "@/components/partner-test-section";
 
 const PARTNER_STATS = [
   {
@@ -255,8 +256,14 @@ export function PartnerPage({
           </div>
         </section>
 
+        {/* Test placement */}
+        <PartnerTestSection />
+
         {/* Checkout */}
-        <section className="flex flex-col items-center gap-4">
+        <section
+          id="partner-checkout"
+          className="flex flex-col items-center gap-4 scroll-mt-24"
+        >
           {checkoutStatus === "success" ? (
             <div
               className="w-full max-w-xl rounded-lg border-[3px] border-emerald-500 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900"
@@ -284,6 +291,10 @@ export function PartnerPage({
                 <p className="mt-2 text-zinc-600">
                   Add your details and checkout to get your button live on
                   GitReverse.
+                </p>
+                <p className="mt-2 text-sm font-semibold text-zinc-900">
+                  Estimated high-intent visitors to your site:{" "}
+                  <span className="text-[#d31611]">2,500–3,500 per month</span>
                 </p>
               </div>
               <PartnerCheckoutForm />
