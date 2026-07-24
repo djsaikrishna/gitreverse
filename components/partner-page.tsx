@@ -2,8 +2,6 @@ import type { ReactNode } from "react";
 import { Navbar } from "@/components/navbar";
 import { PartnerCheckoutForm } from "@/components/partner-checkout-form";
 import { PartnerScreenshots } from "@/components/partner-screenshots";
-import { PartnerTestSection } from "@/components/partner-test-section";
-
 const PARTNER_STATS = [
   {
     name: "make.design",
@@ -256,9 +254,6 @@ export function PartnerPage({
           </div>
         </section>
 
-        {/* Test placement */}
-        <PartnerTestSection />
-
         {/* Checkout */}
         <section
           id="partner-checkout"
@@ -291,10 +286,6 @@ export function PartnerPage({
                 <p className="mt-2 text-zinc-600">
                   Add your details and checkout to get your button live on
                   GitReverse.
-                </p>
-                <p className="mt-2 text-sm font-semibold text-zinc-900">
-                  Estimated high-intent visitors to your site:{" "}
-                  <span className="text-[#d31611]">2,500–3,500 per month</span>
                 </p>
               </div>
               <PartnerCheckoutForm />
