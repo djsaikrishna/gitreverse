@@ -2,60 +2,47 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { track } from "@vercel/analytics";
-import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
 import { PartnerButton } from "@/components/partner-button";
 import { PromptMarkdown } from "@/components/prompt-markdown";
-import { WebsiteDesignFlavorText } from "@/components/website-design-flavor-text";
-import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
+import { parseGitHubProfileInput } from "@/lib/parse-github-profile";
+import { pathWithPartnerPreviewParams } from "@/lib/partner-preview";
 import { usePartnerPreview } from "@/lib/use-partner-preview";
 
-type WebsiteReversePageProps = {
-  siteSlug: string;
-  targetUrl: string;
+type ProfileReversePageProps = {
+  login: string;
+  initialPrompt?: string;
 };
 
-function hostnameOf(url: string, fallback: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return fallback;
-  }
-}
-
-export function WebsiteReversePage({
-  siteSlug,
-  targetUrl,
-}: WebsiteReversePageProps) {
+export function ProfileReversePage({
+  login,
+  initialPrompt,
+}: ProfileReversePageProps) {
   const router = useRouter();
 
-  const [currentSlug, setCurrentSlug] = useState(siteSlug);
-  const [currentTargetUrl, setCurrentTargetUrl] = useState(targetUrl);
-  const [inputValue, setInputValue] = useState(targetUrl);
-
-  const [prompt, setPrompt] = useState<string | null>(null);
+  const [currentLogin, setCurrentLogin] = useState(login);
+  const [inputValue, setInputValue] = useState(`@${login}`);
+  const [prompt, setPrompt] = useState<string | null>(initialPrompt ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [statusLine, setStatusLine] = useState("Checking if it's cached…");
+  const [loading, setLoading] = useState(!initialPrompt);
+  const [statusLine, setStatusLine] = useState("Checking if it's cached");
   const [copied, setCopied] = useState(false);
   const started = useRef(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   const partnerPreview = usePartnerPreview();
 
-  const run = useCallback(async (slug: string, url: string) => {
+  const run = useCallback(async (profileLogin: string) => {
     setLoading(true);
     setError(null);
     setPrompt(null);
-    setStatusLine("Checking if it's cached…");
+    setStatusLine("Checking if it's cached");
 
     try {
-      const res = await fetch("/api/reverse-website", {
+      const res = await fetch("/api/reverse-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          siteSlug: slug,
-          targetUrl: url,
+          login: profileLogin,
           stream: true,
         }),
       });
@@ -63,6 +50,7 @@ export function WebsiteReversePage({
       const contentType = res.headers.get("content-type") ?? "";
       if (contentType.includes("application/json")) {
         const data = (await res.json()) as {
+          login?: string;
           prompt?: string;
           fromCache?: boolean;
           error?: string;
@@ -72,6 +60,7 @@ export function WebsiteReversePage({
         }
         if (data.prompt) {
           setPrompt(data.prompt);
+          if (data.login) setCurrentLogin(data.login);
           if (data.fromCache) setStatusLine("Loaded from cache");
         } else {
           throw new Error("No prompt returned.");
@@ -106,6 +95,7 @@ export function WebsiteReversePage({
           try {
             const json = JSON.parse(dataLine.slice(5).trim()) as {
               message?: string;
+              login?: string;
               prompt?: string;
               fromCache?: boolean;
               error?: string;
@@ -114,8 +104,9 @@ export function WebsiteReversePage({
             if (event === "status" && typeof json.message === "string") {
               setStatusLine(json.message);
             }
-            if (event === "done" && typeof json.prompt === "string") {
-              setPrompt(json.prompt);
+            if (event === "done") {
+              if (typeof json.prompt === "string") setPrompt(json.prompt);
+              if (typeof json.login === "string") setCurrentLogin(json.login);
               if (json.fromCache) setStatusLine("Loaded from cache");
             }
             if (event === "error" && typeof json.error === "string") {
@@ -138,9 +129,19 @@ export function WebsiteReversePage({
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void run(siteSlug, targetUrl);
+    if (initialPrompt) return;
+    void run(login);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!prompt || !currentLogin) return;
+    void fetch("/api/increment-profile-views", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login: currentLogin }),
+    }).catch(() => {});
+  }, [currentLogin, prompt]);
 
   useEffect(() => {
     if (prompt && resultsRef.current) {
@@ -163,33 +164,28 @@ export function WebsiteReversePage({
     e.preventDefault();
     if (loading) return;
 
-    const parsed = parseWebsiteInput(inputValue.trim());
+    const parsed = parseGitHubProfileInput(inputValue.trim());
     if (!parsed) {
       setError(
-        "Could not parse website URL. Use https://example.com or example.com."
+        "Could not parse GitHub profile. Use @shadcn or https://github.com/shadcn."
       );
       return;
     }
 
-    const slug = urlToSlug(parsed.hostname);
-    setCurrentSlug(slug);
-    setCurrentTargetUrl(parsed.url);
+    setCurrentLogin(parsed.login);
     router.replace(
-      `/website/${encodeURIComponent(slug)}?url=${encodeURIComponent(parsed.url)}`,
+      pathWithPartnerPreviewParams(`/${encodeURIComponent(parsed.login)}`),
       { scroll: false }
     );
-    void run(slug, parsed.url);
+    void run(parsed.login);
   }
-
-  const displayHost = hostnameOf(currentTargetUrl, currentSlug);
-  const isWritingDesign = statusLine === "Writing design.md";
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FFFDF8] text-zinc-900">
       <Navbar />
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center gap-12 px-4 py-12 sm:px-6">
-        <h1 className="sr-only">{`${displayHost} — reverse-engineered prompt`}</h1>
+        <h1 className="sr-only">{`@${currentLogin} system prompt`}</h1>
 
         <div className="flex w-full max-w-2xl flex-col gap-3">
           <div className="relative w-full">
@@ -202,10 +198,10 @@ export function WebsiteReversePage({
                 <div className="relative min-w-0 flex-1">
                   <div className="absolute inset-0 translate-x-1 translate-y-1 rounded bg-zinc-900" />
                   <input
-                    name="siteUrl"
+                    name="profile"
                     autoComplete="off"
                     className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
-                    placeholder="https://linear.app"
+                    placeholder="@shadcn"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     required
@@ -221,52 +217,19 @@ export function WebsiteReversePage({
                       loading ? "bg-[#b5120e]" : "bg-[#d31611]"
                     }`}
                   >
-                    {loading ? (
-                      <>
-                        <svg
-                          className="h-5 w-5 shrink-0 animate-spin text-white"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          aria-hidden
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Processing…</span>
-                      </>
-                    ) : (
-                      "Get Prompt"
-                    )}
+                    {loading ? "Processing…" : "Get Prompt"}
                   </button>
                 </div>
               </div>
 
               {loading && !prompt && !error ? (
-                <div className="mt-4">
-                  {isWritingDesign ? (
-                    <WebsiteDesignFlavorText />
-                  ) : (
-                    <p
-                      className="min-h-[1.25rem] text-sm text-zinc-600"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      {statusLine}…
-                    </p>
-                  )}
-                </div>
+                <p
+                  className="mt-4 min-h-[1.25rem] text-sm text-zinc-600"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {statusLine}…
+                </p>
               ) : null}
 
               {error ? (
@@ -277,7 +240,7 @@ export function WebsiteReversePage({
                   {error}
                   <button
                     type="button"
-                    onClick={() => void run(currentSlug, currentTargetUrl)}
+                    onClick={() => void run(currentLogin)}
                     className="ml-3 font-medium underline"
                   >
                     Retry
@@ -298,35 +261,16 @@ export function WebsiteReversePage({
             <section className="relative z-10 rounded-xl border-[3px] border-zinc-900 bg-[#fafafa] p-6">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-zinc-700">
-                  Reverse engineered prompt
+                  System prompt
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   {partnerPreview && prompt ? (
                     <PartnerButton
                       config={partnerPreview}
                       prompt={prompt}
-                      placement="website-card"
+                      placement="profile-card"
                     />
-                  ) : (
-                    <a
-                      href={`https://lovable.dev?prompt=${encodeURIComponent(prompt)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Build this with Lovable"
-                      onClick={() =>
-                        track("Build This Click", {
-                          destination: "lovable.dev",
-                          placement: "website-card",
-                        })
-                      }
-                      className="group/build relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
-                    >
-                      <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/build:translate-x-px group-hover/build:translate-y-px" />
-                      <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/build:bg-zinc-50">
-                        Build this
-                      </span>
-                    </a>
-                  )}
+                  ) : null}
                   <div className="group relative">
                     <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
                     <button
@@ -342,11 +286,6 @@ export function WebsiteReversePage({
               <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
                 <PromptMarkdown>{prompt}</PromptMarkdown>
               </div>
-              <CodeRabbitBanner
-                className="mt-4 w-full"
-                embedded
-                placement="website-card"
-              />
             </section>
           </div>
         ) : null}

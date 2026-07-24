@@ -7,7 +7,7 @@ const CODERABBIT_ICON_URL =
 type CodeRabbitBannerProps = {
   className?: string;
   embedded?: boolean;
-  placement?: "home-card" | "repo-card" | "website-card";
+  placement?: "home-card" | "repo-card" | "website-card" | "profile-card";
 };
 
 const BANNER_COPY = {

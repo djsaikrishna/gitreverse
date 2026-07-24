@@ -6,6 +6,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
+import { PartnerButton } from "@/components/partner-button";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -23,6 +24,8 @@ import {
   syncHistoryEntry,
   writeLocalHistory,
 } from "@/lib/user-history";
+import { usePartnerPreview } from "@/lib/use-partner-preview";
+import { pathWithPartnerPreviewParams } from "@/lib/partner-preview";
 
 type ReversePromptHomeProps = {
   initialRepoInput?: string;
@@ -67,6 +70,7 @@ export function ReversePromptHome({
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const autoSubmitStartedRef = useRef(false);
   const githubHref = githubProjectUrl(owner, repo, repoUrl);
+  const partnerPreview = usePartnerPreview();
 
   /** Home: honor `?mode=website` for shareable website-reverse entry. */
   useEffect(() => {
@@ -108,7 +112,9 @@ export function ReversePromptHome({
           window.history.replaceState(
             null,
             "",
-            `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
+            pathWithPartnerPreviewParams(
+              `/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`
+            )
           );
         }
       } else {
@@ -543,6 +549,13 @@ export function ReversePromptHome({
                   Reverse engineered prompt
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  {partnerPreview && prompt ? (
+                    <PartnerButton
+                      config={partnerPreview}
+                      prompt={prompt}
+                      placement="repo-card"
+                    />
+                  ) : null}
                   {githubHref ? (
                     <a
                       href={githubHref}
