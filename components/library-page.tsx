@@ -218,7 +218,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
           )}
         </div>
 
-        <CodeRabbitBanner className="w-full" />
+        <CodeRabbitBanner className="w-full" placement="library" />
 
         {/* Count line */}
         {search ? (
