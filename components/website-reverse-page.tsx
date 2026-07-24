@@ -2,14 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { track } from "@vercel/analytics";
 import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
-import { PartnerButton } from "@/components/partner-button";
 import { PromptMarkdown } from "@/components/prompt-markdown";
 import { WebsiteDesignFlavorText } from "@/components/website-design-flavor-text";
 import { parseWebsiteInput, urlToSlug } from "@/lib/parse-website-input";
-import { usePartnerPreview } from "@/lib/use-partner-preview";
 
 type WebsiteReversePageProps = {
   siteSlug: string;
@@ -41,7 +38,6 @@ export function WebsiteReversePage({
   const [copied, setCopied] = useState(false);
   const started = useRef(false);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const partnerPreview = usePartnerPreview();
 
   const run = useCallback(async (slug: string, url: string) => {
     setLoading(true);
@@ -301,32 +297,6 @@ export function WebsiteReversePage({
                   Reverse engineered prompt
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  {partnerPreview && prompt ? (
-                    <PartnerButton
-                      config={partnerPreview}
-                      prompt={prompt}
-                      placement="website-card"
-                    />
-                  ) : (
-                    <a
-                      href={`https://lovable.dev?prompt=${encodeURIComponent(prompt)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Build this with Lovable"
-                      onClick={() =>
-                        track("Build This Click", {
-                          destination: "lovable.dev",
-                          placement: "website-card",
-                        })
-                      }
-                      className="group/build relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
-                    >
-                      <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/build:translate-x-px group-hover/build:translate-y-px" />
-                      <span className="relative z-10 inline-flex items-center gap-1.5 rounded border-[3px] border-zinc-900 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/build:bg-zinc-50">
-                        Build this
-                      </span>
-                    </a>
-                  )}
                   <div className="group relative">
                     <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
                     <button

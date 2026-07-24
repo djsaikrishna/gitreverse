@@ -7,7 +7,12 @@ const CODERABBIT_ICON_URL =
 type CodeRabbitBannerProps = {
   className?: string;
   embedded?: boolean;
-  placement?: "home-card" | "repo-card" | "website-card" | "profile-card";
+  placement?:
+    | "home-card"
+    | "repo-card"
+    | "website-card"
+    | "profile-card"
+    | "library";
 };
 
 const BANNER_COPY = {
@@ -17,17 +22,28 @@ const BANNER_COPY = {
       "CodeRabbit catches bugs before merge — free trial, 2-click install.",
     variant: "default",
   },
-  repo: {
+  build: {
     title: "Are you gonna build this?",
     subtitle: "make sure you review the code using coderabbit",
-    variant: "repo",
+    variant: "build",
+  },
+  library: {
+    title: "Cut code review for free",
+    subtitle: "",
+    variant: "library",
   },
 } as const;
 
 function copyForPlacement(
   placement: NonNullable<CodeRabbitBannerProps["placement"]>
 ) {
-  return placement === "repo-card" ? BANNER_COPY.repo : BANNER_COPY.default;
+  if (placement === "repo-card" || placement === "website-card") {
+    return BANNER_COPY.build;
+  }
+  if (placement === "library") {
+    return BANNER_COPY.library;
+  }
+  return BANNER_COPY.default;
 }
 
 export function CodeRabbitBanner({
@@ -54,9 +70,13 @@ export function CodeRabbitBanner({
         >
           {copy.title}
         </p>
-        <p className={`text-zinc-600 ${embedded ? "text-[11px]" : "text-xs"}`}>
-          {copy.subtitle}
-        </p>
+        {copy.subtitle ? (
+          <p
+            className={`text-zinc-600 ${embedded ? "text-[11px]" : "text-xs"}`}
+          >
+            {copy.subtitle}
+          </p>
+        ) : null}
       </div>
       <span
         className={`shrink-0 rounded border-[2px] border-zinc-900 bg-[#FF570A] font-semibold text-white ${
