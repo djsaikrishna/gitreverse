@@ -10,8 +10,8 @@ type AeosBannerProps = {
 
 const COPY = {
   "website-card": {
-    title: "You reversed the site — now make AI recommend it",
-    subtitle: "AEOS audits how ChatGPT, Gemini & Perplexity see your site.",
+    title: "Are you gonna build this?",
+    subtitle: "Make sure ChatGPT will recommend your tool",
   },
   "design-card": {
     title: "You reversed the site — now make AI recommend it",
@@ -57,7 +57,7 @@ export function AeosBanner({
           embedded ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs"
         }`}
       >
-        Analyze free
+        Try free
       </span>
     </>
   );
