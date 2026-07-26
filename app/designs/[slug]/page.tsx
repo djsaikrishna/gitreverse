@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { AeosBanner } from "@/components/aeos-banner";
 import { Navbar } from "@/components/navbar";
 import { PromptMarkdown } from "@/components/prompt-markdown";
 import { isValidWebsiteSlug } from "@/lib/parse-website-input";
@@ -71,11 +70,6 @@ export default async function DesignSystemPage({ params }: PageProps) {
             <div className="overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
               <PromptMarkdown>{cached.designMd}</PromptMarkdown>
             </div>
-            <AeosBanner
-              className="mt-4 w-full"
-              embedded
-              placement="design-card"
-            />
           </section>
         </div>
       </main>
