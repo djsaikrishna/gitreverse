@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { AeosBanner } from "@/components/aeos-banner";
 import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
@@ -488,11 +487,6 @@ export function ReversePromptHome({
                         </div>
                       ))}
                     </div>
-                    <AeosBanner
-                      className="w-full"
-                      embedded
-                      placement="home-card"
-                    />
                   </div>
                 ) : null}
               </form>
