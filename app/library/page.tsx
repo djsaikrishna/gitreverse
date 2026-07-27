@@ -42,7 +42,7 @@ const getCachedInitialLibrary = unstable_cache(
       return { data: [], total: 0 };
     }
   },
-  ["library-initial-newest-v2"],
+  ["library-initial-newest-v3"],
   { revalidate: 60 }
 );
 

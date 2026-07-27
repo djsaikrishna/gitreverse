@@ -481,6 +481,74 @@ function mergeFetchLimit(page: number, limit: number): number {
   return Math.min(MAX_FETCH_LIMIT, (page + 1) * limit);
 }
 
+function logSourceFailure(
+  source: string,
+  operation: string,
+  error: unknown
+): void {
+  console.error(
+    `[library] ${source} ${operation} failed:`,
+    error instanceof Error ? error.message : error
+  );
+}
+
+async function safeBrowseSource<T>(
+  source: "code" | "website" | "profile",
+  fetch: () => Promise<{ rows: T[]; total: number }>
+): Promise<{ rows: T[]; total: number }> {
+  try {
+    return await fetch();
+  } catch (error) {
+    logSourceFailure(source, "browse", error);
+    return { rows: [], total: 0 };
+  }
+}
+
+async function safeSearchSource<T>(
+  source: "code" | "website" | "profile",
+  fetch: () => Promise<{ rows: T[]; total: number }>
+): Promise<{ rows: T[]; total: number }> {
+  try {
+    return await fetch();
+  } catch (error) {
+    logSourceFailure(source, "search", error);
+    return { rows: [], total: 0 };
+  }
+}
+
+async function safeCodeSearch(
+  fetch: () => Promise<{ rows: PromptRow[]; total: number; strategy: FtsStrategy }>
+): Promise<{ rows: PromptRow[]; total: number; strategy: FtsStrategy }> {
+  try {
+    return await fetch();
+  } catch (error) {
+    logSourceFailure("code", "search", error);
+    return { rows: [], total: 0, strategy: "fts-plain" };
+  }
+}
+
+async function safeHybridCodeRows(
+  fetch: () => Promise<PromptRow[]>
+): Promise<PromptRow[]> {
+  try {
+    return await fetch();
+  } catch (error) {
+    logSourceFailure("code", "hybrid search", error);
+    return [];
+  }
+}
+
+async function safeHybridCount(
+  fetch: () => Promise<number>
+): Promise<number> {
+  try {
+    return await fetch();
+  } catch (error) {
+    logSourceFailure("code", "hybrid count", error);
+    return 0;
+  }
+}
+
 export async function browseLibrary(opts: {
   supabase: SupabaseClient;
   sort: SortOption;
@@ -527,9 +595,15 @@ export async function browseLibrary(opts: {
   }
 
   const [code, website, profile] = await Promise.all([
-    fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit),
-    fetchWebsiteBrowse(opts.supabase, opts.sort, fetchLimit),
-    fetchProfileBrowse(opts.supabase, opts.sort, fetchLimit),
+    safeBrowseSource("code", () =>
+      fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit)
+    ),
+    safeBrowseSource("website", () =>
+      fetchWebsiteBrowse(opts.supabase, opts.sort, fetchLimit)
+    ),
+    safeBrowseSource("profile", () =>
+      fetchProfileBrowse(opts.supabase, opts.sort, fetchLimit)
+    ),
   ]);
 
   const merged = mergeBrowse(code.rows, website.rows, profile.rows, opts.sort);
@@ -623,39 +697,48 @@ export async function searchLibrary(opts: {
   }
 
   if (opts.useHybrid) {
-    try {
-      const [codeRows, website, codeTotal] = await Promise.all([
-        fetchCodeHybrid(opts.supabase, opts.search, fetchLimit),
-        fetchWebsiteSearch(opts.supabase, opts.search, opts.sort, fetchLimit),
-        hybridSearchCount(opts.supabase, opts.search),
-      ]);
-      const profile = await fetchProfileSearch(
-        opts.supabase,
-        opts.search,
-        opts.sort,
-        fetchLimit
-      );
+    const [codeRows, website, codeTotal, profile] = await Promise.all([
+      safeHybridCodeRows(() =>
+        fetchCodeHybrid(opts.supabase, opts.search, fetchLimit)
+      ),
+      safeSearchSource("website", () =>
+        fetchWebsiteSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
+      ),
+      safeHybridCount(() => hybridSearchCount(opts.supabase, opts.search)),
+      safeSearchSource("profile", () =>
+        fetchProfileSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
+      ),
+    ]);
 
-      if (codeRows.length > 0 || website.rows.length > 0 || profile.rows.length > 0) {
-        const merged = mergeSearch(codeRows, website.rows, profile.rows, opts.search);
-        return {
-          data: paginateLibraryEntries(merged, opts.page, opts.limit),
-          total: codeTotal + website.total + profile.total,
-          strategy: "hybrid",
-        };
-      }
-    } catch (error) {
-      console.error(
-        "[library] hybrid search failed, falling back to FTS:",
-        error instanceof Error ? error.message : error
+    if (
+      codeRows.length > 0 ||
+      website.rows.length > 0 ||
+      profile.rows.length > 0
+    ) {
+      const merged = mergeSearch(
+        codeRows,
+        website.rows,
+        profile.rows,
+        opts.search
       );
+      return {
+        data: paginateLibraryEntries(merged, opts.page, opts.limit),
+        total: codeTotal + website.total + profile.total,
+        strategy: "hybrid",
+      };
     }
   }
 
   const [code, website, profile] = await Promise.all([
-    fetchCodeSearch(opts.supabase, opts.search, opts.sort, fetchLimit),
-    fetchWebsiteSearch(opts.supabase, opts.search, opts.sort, fetchLimit),
-    fetchProfileSearch(opts.supabase, opts.search, opts.sort, fetchLimit),
+    safeCodeSearch(() =>
+      fetchCodeSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
+    ),
+    safeSearchSource("website", () =>
+      fetchWebsiteSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
+    ),
+    safeSearchSource("profile", () =>
+      fetchProfileSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
+    ),
   ]);
 
   const merged = mergeSearch(code.rows, website.rows, profile.rows, opts.search);
