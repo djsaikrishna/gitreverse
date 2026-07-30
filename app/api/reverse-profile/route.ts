@@ -4,10 +4,10 @@ import {
   type ProfileReverseResult,
 } from "@/lib/profile-reverse-engine";
 import {
-  isValidGitHubProfileLogin,
+  isValidXProfileHandle,
   normalizeProfileSegment,
-  parseGitHubProfileInput,
-} from "@/lib/parse-github-profile";
+  parseXProfileInput,
+} from "@/lib/parse-x-profile";
 import { readProfileReverse } from "@/lib/profile-reverse-storage";
 
 export const runtime = "nodejs";
@@ -128,12 +128,12 @@ export async function POST(request: NextRequest) {
         ? body.login
         : "";
 
-  const parsed = parseGitHubProfileInput(rawInput);
+  const parsed = parseXProfileInput(rawInput);
   if (!parsed) {
     return NextResponse.json(
       {
         error:
-          "Enter a GitHub profile like @shadcn or https://github.com/shadcn.",
+          "Enter an X profile like @elonmusk or https://x.com/elonmusk.",
       },
       { status: 400 }
     );
@@ -153,8 +153,8 @@ export async function GET(request: NextRequest) {
   }
 
   const login = normalizeProfileSegment(loginRaw).toLowerCase();
-  if (!isValidGitHubProfileLogin(login)) {
-    return NextResponse.json({ error: "Invalid GitHub login." }, { status: 400 });
+  if (!isValidXProfileHandle(login)) {
+    return NextResponse.json({ error: "Invalid X handle." }, { status: 400 });
   }
 
   const cached = await readProfileReverse(login);

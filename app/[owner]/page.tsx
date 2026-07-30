@@ -5,9 +5,9 @@ import { connection } from "next/server";
 import { ProfileReversePage } from "@/components/profile-reverse-page";
 import { JsonLd } from "@/components/json-ld";
 import {
-  isValidGitHubProfileLogin,
+  isValidXProfileHandle,
   normalizeProfileSegment,
-} from "@/lib/parse-github-profile";
+} from "@/lib/parse-x-profile";
 import { readProfileReverse } from "@/lib/profile-reverse-storage";
 
 type PageProps = {
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const pageTitle = data?.displayName?.trim() || login;
   const pageDesc = data?.prompt
     ? data.prompt.slice(0, 160).trimEnd() + "…"
-    : `Reverse-engineered coding agent system prompt for GitHub profile @${login}.`;
+    : `Reverse-engineered X voice system prompt for @${login}.`;
   const url = `https://gitreverse.com/${login}`;
 
   return {
@@ -57,7 +57,7 @@ export default async function OwnerProfilePage({ params }: PageProps) {
   const { owner: ownerRaw } = await params;
   const login = normalizeProfileSegment(decodeURIComponent(ownerRaw)).toLowerCase();
 
-  if (!isValidGitHubProfileLogin(login)) {
+  if (!isValidXProfileHandle(login)) {
     notFound();
   }
 
@@ -70,12 +70,12 @@ export default async function OwnerProfilePage({ params }: PageProps) {
     headline: cached?.displayName?.trim() || login,
     description: cachedPrompt
       ? cachedPrompt.slice(0, 200)
-      : `System prompt reverse engineered from @${login} on GitReverse.`,
+      : `System prompt reverse engineered from @${login} on X via GitReverse.`,
     url: `https://gitreverse.com/${login}`,
     author: {
       "@type": "Person",
       name: cached?.displayName?.trim() || login,
-      url: `https://github.com/${login}`,
+      url: `https://x.com/${login}`,
     },
   };
 

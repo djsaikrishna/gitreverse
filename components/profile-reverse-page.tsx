@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { PartnerButton } from "@/components/partner-button";
 import { PromptMarkdown } from "@/components/prompt-markdown";
-import { parseGitHubProfileInput } from "@/lib/parse-github-profile";
+import { parseXProfileInput } from "@/lib/parse-x-profile";
 import { pathWithPartnerPreviewParams } from "@/lib/partner-preview";
 import { usePartnerPreview } from "@/lib/use-partner-preview";
 
@@ -164,10 +164,10 @@ export function ProfileReversePage({
     e.preventDefault();
     if (loading) return;
 
-    const parsed = parseGitHubProfileInput(inputValue.trim());
+    const parsed = parseXProfileInput(inputValue.trim());
     if (!parsed) {
       setError(
-        "Could not parse GitHub profile. Use @shadcn or https://github.com/shadcn."
+        "Could not parse X profile. Use @elonmusk or https://x.com/elonmusk."
       );
       return;
     }
@@ -201,7 +201,7 @@ export function ProfileReversePage({
                     name="profile"
                     autoComplete="off"
                     className="relative z-10 w-full rounded border-[3px] border-zinc-900 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-500 focus:outline-none"
-                    placeholder="@shadcn"
+                    placeholder="@elonmusk"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     required

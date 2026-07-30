@@ -18,7 +18,7 @@ export type LibraryEntry = {
   /** Website reverse */
   slug?: string;
   target_url?: string;
-  /** Profile reverse */
+  /** X profile reverse */
   login?: string;
   avatar_url?: string;
 };

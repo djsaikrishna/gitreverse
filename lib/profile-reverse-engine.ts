@@ -1,17 +1,14 @@
-import {
-  getGitHubProfileOverview,
-  getGitHubRepoStyleDetails,
-  selectReposForDeepDive,
-  type GitHubProfileOverview,
-  type GitHubProfileRepo,
-  type GitHubRepoStyleDetails,
-} from "@/lib/github-profile-client";
 import { callQuickLlm, resolveLlmTarget } from "@/lib/quick-llm";
 import { PROFILE_SYSTEM_PROMPT } from "@/lib/profile-system-prompt";
 import {
   readProfileReverse,
   writeProfileReverse,
 } from "@/lib/profile-reverse-storage";
+import {
+  getXProfileWithPosts,
+  type XProfileOverview,
+  type XProfilePost,
+} from "@/lib/x-profile-client";
 
 export type ProfileReverseResult =
   | {
@@ -24,66 +21,49 @@ export type ProfileReverseResult =
     }
   | { ok: false; error: string; status: number };
 
-function dependencyFence(path: string): string {
-  if (path.endsWith(".json") || path.endsWith(".toml")) return "json";
-  if (path.endsWith(".gradle.kts")) return "kotlin";
-  if (path.endsWith(".gradle")) return "gradle";
-  if (path.endsWith(".swift")) return "swift";
-  return "";
-}
+function formatPost(post: XProfilePost, index: number): string {
+  const metrics = [
+    post.likeCount != null ? `${post.likeCount} likes` : null,
+    post.retweetCount != null ? `${post.retweetCount} reposts` : null,
+    post.replyCount != null ? `${post.replyCount} replies` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
-function repoBullet(repo: GitHubProfileRepo): string {
-  const language = repo.primaryLanguage ? `, ${repo.primaryLanguage}` : "";
-  const topics =
-    repo.topics.length > 0
-      ? `, topics: ${repo.topics.slice(0, 4).join(", ")}`
-      : "";
-  return `- ${repo.nameWithOwner} (${repo.url})${repo.description ? `: ${repo.description}` : ""} (${repo.stargazerCount} stars${language}${topics})`;
+  return [
+    `Post ${index + 1}${post.createdAt ? ` (${post.createdAt})` : ""}:`,
+    post.text,
+    metrics ? `(${metrics})` : "",
+    post.lang ? `[lang: ${post.lang}]` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function buildProfileAnalysisPrompt(input: {
-  overview: GitHubProfileOverview;
-  repoDetails: GitHubRepoStyleDetails[];
+  overview: XProfileOverview;
+  posts: XProfilePost[];
 }): string {
-  const { overview, repoDetails } = input;
-
-  const repoBlocks = repoDetails
-    .map((repo) =>
-      [
-        `## ${repo.nameWithOwner}`,
-        repo.description ? `Description: ${repo.description}` : "",
-        repo.readme ? `README excerpt:\n${repo.readme}` : "",
-        repo.dependencies && repo.dependenciesPath
-          ? `Dependency manifest (${repo.dependenciesPath}):\n\`\`\`${dependencyFence(repo.dependenciesPath)}\n${repo.dependencies}\n\`\`\``
-          : "",
-        repo.globalsCss && repo.globalsCssPath
-          ? `UI/design file (${repo.globalsCssPath}):\n\`\`\`css\n${repo.globalsCss}\n\`\`\``
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-    )
-    .join("\n\n");
+  const { overview, posts } = input;
 
   return [
-    `Profile login: ${overview.login}`,
+    `X handle: @${overview.handle}`,
     `Display name: ${overview.displayName}`,
     overview.bio ? `Bio: ${overview.bio}` : "",
+    overview.location ? `Location: ${overview.location}` : "",
     overview.websiteUrl ? `Website: ${overview.websiteUrl}` : "",
-    overview.followerCount != null ? `Followers: ${overview.followerCount}` : "",
+    overview.verified ? "Verified: yes" : "",
+    overview.followerCount != null
+      ? `Followers: ${overview.followerCount}`
+      : "",
+    overview.followingCount != null
+      ? `Following: ${overview.followingCount}`
+      : "",
     "",
-    "Pinned / notable repositories:",
-    ...overview.pinnedRepos.map(repoBullet),
-    "",
-    "Top repositories:",
-    ...overview.topRepos.map(repoBullet),
-    "",
-    overview.profileReadme
-      ? `Profile README:\n${overview.profileReadme}`
-      : "Profile README: none",
-    "",
-    "Repository evidence for tech stack and UI taste:",
-    repoBlocks || "No detailed repository excerpts were available.",
+    `Recent original posts (${posts.length} link-free samples, no retweets/replies):`,
+    posts.length > 0
+      ? posts.map(formatPost).join("\n\n")
+      : "No suitable original posts were available in the recent timeline.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -116,36 +96,33 @@ export async function ensureProfileReversed(opts: {
     return { ok: false, error: llm.error, status: 500 };
   }
 
-  onStatus?.("Fetching GitHub profile");
-  let overview: GitHubProfileOverview;
+  onStatus?.("Fetching X profile");
+  let overview: XProfileOverview;
+  let posts: XProfilePost[];
   try {
-    overview = await getGitHubProfileOverview(normalizedLogin);
+    const result = await getXProfileWithPosts(normalizedLogin);
+    overview = result.overview;
+    posts = result.posts;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = message.toLowerCase().includes("not found") ? 404 : 500;
     return { ok: false, error: message, status };
   }
 
-  onStatus?.("Picking the most telling repos");
-  const selectedRepos = selectReposForDeepDive([
-    ...overview.pinnedRepos,
-    ...overview.topRepos,
-  ]);
-
-  onStatus?.("Reading READMEs and style files");
-  let repoDetails: GitHubRepoStyleDetails[];
-  try {
-    repoDetails = await getGitHubRepoStyleDetails(selectedRepos);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: message, status: 502 };
+  if (posts.length === 0) {
+    return {
+      ok: false,
+      error:
+        "No link-free original posts found on this profile. Try another account with more text posts.",
+      status: 422,
+    };
   }
 
   onStatus?.("Writing system prompt");
   const promptResult = await callQuickLlm(
     llm,
     PROFILE_SYSTEM_PROMPT,
-    buildProfileAnalysisPrompt({ overview, repoDetails }),
+    buildProfileAnalysisPrompt({ overview, posts }),
     3000
   );
 
@@ -168,7 +145,7 @@ export async function ensureProfileReversed(opts: {
 
   try {
     await writeProfileReverse({
-      login: overview.login,
+      login: overview.handle,
       displayName: overview.displayName,
       avatarUrl: overview.avatarUrl,
       prompt,
@@ -182,7 +159,7 @@ export async function ensureProfileReversed(opts: {
 
   return {
     ok: true,
-    login: overview.login,
+    login: overview.handle,
     displayName: overview.displayName,
     avatarUrl: overview.avatarUrl,
     prompt,

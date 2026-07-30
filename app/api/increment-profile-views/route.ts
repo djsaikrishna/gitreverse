@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  isValidGitHubProfileLogin,
+  isValidXProfileHandle,
   normalizeProfileSegment,
-} from "@/lib/parse-github-profile";
+} from "@/lib/parse-x-profile";
 import { getSupabase } from "@/lib/supabase";
 import {
   hashVisitorIp,
@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
   }
 
   const login = normalizeProfileSegment(loginRaw).toLowerCase();
-  if (!isValidGitHubProfileLogin(login)) {
-    return NextResponse.json({ error: "Invalid login." }, { status: 400 });
+  if (!isValidXProfileHandle(login)) {
+    return NextResponse.json({ error: "Invalid handle." }, { status: 400 });
   }
 
   const supabase = getSupabase();
