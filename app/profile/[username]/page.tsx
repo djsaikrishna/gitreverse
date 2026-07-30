@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import {
-  isValidGitHubProfileLogin,
+  isValidXProfileHandle,
   normalizeProfileSegment,
-} from "@/lib/parse-github-profile";
+} from "@/lib/parse-x-profile";
 import { notFound } from "next/navigation";
 
 type PageProps = {
@@ -14,7 +14,7 @@ export default async function ProfileUsernameRedirect({ params }: PageProps) {
   const { username: usernameRaw } = await params;
   const login = normalizeProfileSegment(decodeURIComponent(usernameRaw)).toLowerCase();
 
-  if (!isValidGitHubProfileLogin(login)) {
+  if (!isValidXProfileHandle(login)) {
     notFound();
   }
 
