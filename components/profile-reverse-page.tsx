@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { PartnerButton } from "@/components/partner-button";
@@ -271,6 +272,15 @@ export function ProfileReversePage({
                       placement="profile-card"
                     />
                   ) : null}
+                  <Link
+                    href={`/chat/${encodeURIComponent(currentLogin)}`}
+                    className="group/chat relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
+                  >
+                    <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900 transition-transform group-hover/chat:translate-x-px group-hover/chat:translate-y-px" />
+                    <span className="relative z-10 inline-flex items-center rounded border-[3px] border-zinc-900 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-colors group-hover/chat:bg-zinc-50">
+                      Chat
+                    </span>
+                  </Link>
                   <div className="group relative">
                     <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
                     <button
