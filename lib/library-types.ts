@@ -1,4 +1,4 @@
-export type LibraryEntryKind = "code" | "website" | "profile";
+export type LibraryEntryKind = "code" | "website";
 
 export type LibraryKindFilter = "all" | LibraryEntryKind;
 
@@ -18,9 +18,6 @@ export type LibraryEntry = {
   /** Website reverse */
   slug?: string;
   target_url?: string;
-  /** X profile reverse */
-  login?: string;
-  avatar_url?: string;
 };
 
 export type SortOption = "trending" | "newest" | "oldest";
@@ -75,30 +72,6 @@ export function websiteEntryFromRow(row: {
     cached_at: row.cached_at,
     title: hostname,
     href: `/website/${encodeURIComponent(row.slug)}?url=${encodeURIComponent(row.target_url)}`,
-    relevance_score: row.relevance_score,
-  };
-}
-
-export function profileEntryFromRow(row: {
-  login: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  prompt: string;
-  cached_at: string;
-  views?: number | null;
-  relevance_score?: number;
-}): LibraryEntry {
-  const login = row.login.trim();
-  return {
-    kind: "profile",
-    key: `profile:${login}`,
-    login,
-    avatar_url: row.avatar_url?.trim() || undefined,
-    prompt: row.prompt,
-    cached_at: row.cached_at,
-    views: row.views ?? 0,
-    title: row.display_name?.trim() || login,
-    href: `/${encodeURIComponent(login)}`,
     relevance_score: row.relevance_score,
   };
 }

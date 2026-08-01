@@ -11,11 +11,8 @@
     "db:migrate:title": "node --env-file=.env.local scripts/apply-title-migration.mjs"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^3.0.18",
-    "@ai-sdk/react": "^4.0.47",
     "@supabase/supabase-js": "^2.101.1",
     "@vercel/analytics": "^2.0.1",
-    "ai": "^7.0.44",
     "context.dev": "^2.5.0",
     "next": "16.2.1",
     "react": "19.2.4",

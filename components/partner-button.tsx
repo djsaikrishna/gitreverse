@@ -5,7 +5,7 @@ import type { PartnerPreviewConfig } from "@/lib/partner-preview";
 type PartnerButtonProps = {
   config: PartnerPreviewConfig;
   prompt: string;
-  placement: "repo-card" | "website-card" | "profile-card" | "partner-preview";
+  placement: "repo-card" | "website-card" | "partner-preview";
 };
 
 export function PartnerButton({ config, prompt, placement }: PartnerButtonProps) {

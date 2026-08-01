@@ -123,7 +123,7 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
             Prompt Library
           </h1>
           <p className="max-w-lg text-lg text-zinc-600">
-            Reverse-engineered prompts from GitHub repositories, live websites, and X profiles.
+            Reverse-engineered prompts from GitHub repositories and live websites.
           </p>
         </div>
 
@@ -402,32 +402,6 @@ function KindBadge({ kind }: { kind: LibraryEntry["kind"] }) {
           />
         </svg>
         Website
-      </span>
-    );
-  }
-
-  if (kind === "profile") {
-    return (
-      <span
-        className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800"
-        title="X profile reverse"
-      >
-        <svg
-          className="h-3.5 w-3.5 shrink-0"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-          aria-hidden
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-          />
-        </svg>
-        X profile
       </span>
     );
   }
