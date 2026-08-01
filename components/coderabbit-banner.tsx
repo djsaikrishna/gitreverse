@@ -11,7 +11,6 @@ type CodeRabbitBannerProps = {
     | "home-card"
     | "repo-card"
     | "website-card"
-    | "profile-card"
     | "library";
 };
 

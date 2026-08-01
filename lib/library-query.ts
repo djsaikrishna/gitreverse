@@ -3,7 +3,6 @@ import { embedText } from "@/lib/embeddings";
 import {
   codeEntryFromRow,
   paginateLibraryEntries,
-  profileEntryFromRow,
   sortLibraryEntries,
   websiteEntryFromRow,
   type LibraryEntry,
@@ -18,11 +17,8 @@ const MAX_FETCH_LIMIT = 96;
 
 const CODE_TABLE = "library_code_entries";
 const WEBSITE_TABLE = "library_website_entries";
-const PROFILE_TABLE = "library_profile_entries";
 const CODE_COLUMNS = "id, owner, repo, prompt, cached_at, views, title";
 const WEBSITE_COLUMNS = "slug, target_url, prompt, cached_at";
-const PROFILE_COLUMNS =
-  "login, display_name, avatar_url, prompt, cached_at, views";
 
 type PromptRow = {
   id: number;
@@ -40,15 +36,6 @@ type WebsiteRow = {
   target_url: string;
   prompt: string;
   cached_at: string;
-};
-
-type ProfileRow = {
-  login: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  prompt: string;
-  cached_at: string;
-  views: number;
 };
 
 function searchWords(raw: string): string[] {
@@ -117,37 +104,6 @@ function applyWebsiteSort(
   }
 }
 
-function applyProfileSort(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query: any,
-  sort: SortOption,
-  searching: boolean
-) {
-  let q = query;
-  switch (sort) {
-    case "oldest":
-      q = q.order("cached_at", { ascending: true });
-      break;
-    case "newest":
-      q = q.order("cached_at", { ascending: false });
-      break;
-    case "trending":
-    default:
-      q = q
-        .gte(
-          "cached_at",
-          new Date(Date.now() - TRENDING_WINDOW_MS).toISOString()
-        )
-        .order("views", { ascending: false })
-        .order("cached_at", { ascending: false });
-      break;
-  }
-  if (searching) {
-    q = q.order("views", { ascending: false });
-  }
-  return q;
-}
-
 async function fetchCodeBrowse(
   supabase: SupabaseClient,
   sort: SortOption,
@@ -175,21 +131,6 @@ async function fetchWebsiteBrowse(
 
   if (error) throw new Error(error.message);
   return { rows: (data ?? []) as WebsiteRow[], total: count ?? 0 };
-}
-
-async function fetchProfileBrowse(
-  supabase: SupabaseClient,
-  sort: SortOption,
-  fetchLimit: number
-): Promise<{ rows: ProfileRow[]; total: number }> {
-  const { data, count, error } = await applyProfileSort(
-    supabase.from(PROFILE_TABLE).select(PROFILE_COLUMNS, { count: "exact" }),
-    sort,
-    false
-  ).range(0, fetchLimit - 1);
-
-  if (error) throw new Error(error.message);
-  return { rows: (data ?? []) as ProfileRow[], total: count ?? 0 };
 }
 
 type FtsStrategy = "fts-plain" | "fts-or" | "ilike-and" | "ilike-or";
@@ -300,33 +241,6 @@ async function fetchWebsiteSearch(
   return { rows: (data ?? []) as WebsiteRow[], total: count ?? 0 };
 }
 
-async function fetchProfileSearch(
-  supabase: SupabaseClient,
-  search: string,
-  sort: SortOption,
-  fetchLimit: number
-): Promise<{ rows: ProfileRow[]; total: number }> {
-  const words = searchWords(search);
-  let query = supabase
-    .from(PROFILE_TABLE)
-    .select(PROFILE_COLUMNS, { count: "exact" });
-
-  if (words.length > 0) {
-    for (const word of words) {
-      query = query.or(`login.ilike.%${word}%,display_name.ilike.%${word}%`);
-    }
-  }
-
-  const { data, count, error } = await applyProfileSort(
-    query,
-    sort,
-    words.length > 0
-  ).range(0, fetchLimit - 1);
-
-  if (error) throw new Error(error.message);
-  return { rows: (data ?? []) as ProfileRow[], total: count ?? 0 };
-}
-
 function scoreWebsiteSearch(row: WebsiteRow, search: string): number {
   const words = searchWords(search);
   if (words.length === 0) return 0;
@@ -335,19 +249,6 @@ function scoreWebsiteSearch(row: WebsiteRow, search: string): number {
     const w = word.toLowerCase();
     if (row.slug.toLowerCase().includes(w)) score += 3;
     if (row.target_url.toLowerCase().includes(w)) score += 2;
-    if (row.prompt.toLowerCase().includes(w)) score += 1;
-  }
-  return score / words.length;
-}
-
-function scoreProfileSearch(row: ProfileRow, search: string): number {
-  const words = searchWords(search);
-  if (words.length === 0) return 0;
-  let score = 0;
-  for (const word of words) {
-    const w = word.toLowerCase();
-    if (row.login.toLowerCase().includes(w)) score += 3;
-    if ((row.display_name ?? "").toLowerCase().includes(w)) score += 2;
     if (row.prompt.toLowerCase().includes(w)) score += 1;
   }
   return score / words.length;
@@ -428,13 +329,11 @@ async function hybridSearchCount(
 function mergeBrowse(
   codeRows: PromptRow[],
   websiteRows: WebsiteRow[],
-  profileRows: ProfileRow[],
   sort: SortOption
 ): LibraryEntry[] {
   const entries = [
     ...codeRows.map(codeEntryFromRow),
     ...websiteRows.map(websiteEntryFromRow),
-    ...profileRows.map(profileEntryFromRow),
   ];
   return sortLibraryEntries(entries, sort);
 }
@@ -442,7 +341,6 @@ function mergeBrowse(
 function mergeSearch(
   codeRows: PromptRow[],
   websiteRows: WebsiteRow[],
-  profileRows: ProfileRow[],
   search: string
 ): LibraryEntry[] {
   const entries: LibraryEntry[] = [
@@ -454,14 +352,6 @@ function mergeSearch(
       return {
         ...entry,
         relevance_score: Math.max(hybridScore, textScore > 0 ? textScore / 3 : 0),
-      };
-    }),
-    ...profileRows.map((row) => {
-      const entry = profileEntryFromRow(row);
-      const textScore = scoreProfileSearch(row, search);
-      return {
-        ...entry,
-        relevance_score: textScore > 0 ? textScore / 3 : 0,
       };
     }),
   ];
@@ -493,7 +383,7 @@ function logSourceFailure(
 }
 
 async function safeBrowseSource<T>(
-  source: "code" | "website" | "profile",
+  source: "code" | "website",
   fetch: () => Promise<{ rows: T[]; total: number }>
 ): Promise<{ rows: T[]; total: number }> {
   try {
@@ -505,7 +395,7 @@ async function safeBrowseSource<T>(
 }
 
 async function safeSearchSource<T>(
-  source: "code" | "website" | "profile",
+  source: "code" | "website",
   fetch: () => Promise<{ rows: T[]; total: number }>
 ): Promise<{ rows: T[]; total: number }> {
   try {
@@ -561,7 +451,7 @@ export async function browseLibrary(opts: {
 
   if (kind === "code") {
     const code = await fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit);
-    const merged = mergeBrowse(code.rows, [], [], opts.sort);
+    const merged = mergeBrowse(code.rows, [], opts.sort);
     return {
       data: paginateLibraryEntries(merged, opts.page, opts.limit),
       total: code.total,
@@ -574,42 +464,26 @@ export async function browseLibrary(opts: {
       opts.sort,
       fetchLimit
     );
-    const merged = mergeBrowse([], website.rows, [], opts.sort);
+    const merged = mergeBrowse([], website.rows, opts.sort);
     return {
       data: paginateLibraryEntries(merged, opts.page, opts.limit),
       total: website.total,
     };
   }
 
-  if (kind === "profile") {
-    const profile = await fetchProfileBrowse(
-      opts.supabase,
-      opts.sort,
-      fetchLimit
-    );
-    const merged = mergeBrowse([], [], profile.rows, opts.sort);
-    return {
-      data: paginateLibraryEntries(merged, opts.page, opts.limit),
-      total: profile.total,
-    };
-  }
-
-  const [code, website, profile] = await Promise.all([
+  const [code, website] = await Promise.all([
     safeBrowseSource("code", () =>
       fetchCodeBrowse(opts.supabase, opts.sort, fetchLimit)
     ),
     safeBrowseSource("website", () =>
       fetchWebsiteBrowse(opts.supabase, opts.sort, fetchLimit)
     ),
-    safeBrowseSource("profile", () =>
-      fetchProfileBrowse(opts.supabase, opts.sort, fetchLimit)
-    ),
   ]);
 
-  const merged = mergeBrowse(code.rows, website.rows, profile.rows, opts.sort);
+  const merged = mergeBrowse(code.rows, website.rows, opts.sort);
   return {
     data: paginateLibraryEntries(merged, opts.page, opts.limit),
-    total: code.total + website.total + profile.total,
+    total: code.total + website.total,
   };
 }
 
@@ -636,26 +510,11 @@ export async function searchLibrary(opts: {
       opts.sort,
       fetchLimit
     );
-    const merged = mergeSearch([], website.rows, [], opts.search);
+    const merged = mergeSearch([], website.rows, opts.search);
     return {
       data: paginateLibraryEntries(merged, opts.page, opts.limit),
       total: website.total,
       strategy: "website-metadata",
-    };
-  }
-
-  if (kind === "profile") {
-    const profile = await fetchProfileSearch(
-      opts.supabase,
-      opts.search,
-      opts.sort,
-      fetchLimit
-    );
-    const merged = mergeSearch([], [], profile.rows, opts.search);
-    return {
-      data: paginateLibraryEntries(merged, opts.page, opts.limit),
-      total: profile.total,
-      strategy: "profile-metadata",
     };
   }
 
@@ -667,7 +526,7 @@ export async function searchLibrary(opts: {
           hybridSearchCount(opts.supabase, opts.search),
         ]);
         if (codeRows.length > 0) {
-          const merged = mergeSearch(codeRows, [], [], opts.search);
+          const merged = mergeSearch(codeRows, [], opts.search);
           return {
             data: paginateLibraryEntries(merged, opts.page, opts.limit),
             total: codeTotal,
@@ -688,7 +547,7 @@ export async function searchLibrary(opts: {
       opts.sort,
       fetchLimit
     );
-    const merged = mergeSearch(code.rows, [], [], opts.search);
+    const merged = mergeSearch(code.rows, [], opts.search);
     return {
       data: paginateLibraryEntries(merged, opts.page, opts.limit),
       total: code.total,
@@ -697,7 +556,7 @@ export async function searchLibrary(opts: {
   }
 
   if (opts.useHybrid) {
-    const [codeRows, website, codeTotal, profile] = await Promise.all([
+    const [codeRows, website, codeTotal] = await Promise.all([
       safeHybridCodeRows(() =>
         fetchCodeHybrid(opts.supabase, opts.search, fetchLimit)
       ),
@@ -705,46 +564,31 @@ export async function searchLibrary(opts: {
         fetchWebsiteSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
       ),
       safeHybridCount(() => hybridSearchCount(opts.supabase, opts.search)),
-      safeSearchSource("profile", () =>
-        fetchProfileSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
-      ),
     ]);
 
-    if (
-      codeRows.length > 0 ||
-      website.rows.length > 0 ||
-      profile.rows.length > 0
-    ) {
-      const merged = mergeSearch(
-        codeRows,
-        website.rows,
-        profile.rows,
-        opts.search
-      );
+    if (codeRows.length > 0 || website.rows.length > 0) {
+      const merged = mergeSearch(codeRows, website.rows, opts.search);
       return {
         data: paginateLibraryEntries(merged, opts.page, opts.limit),
-        total: codeTotal + website.total + profile.total,
+        total: codeTotal + website.total,
         strategy: "hybrid",
       };
     }
   }
 
-  const [code, website, profile] = await Promise.all([
+  const [code, website] = await Promise.all([
     safeCodeSearch(() =>
       fetchCodeSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
     ),
     safeSearchSource("website", () =>
       fetchWebsiteSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
     ),
-    safeSearchSource("profile", () =>
-      fetchProfileSearch(opts.supabase, opts.search, opts.sort, fetchLimit)
-    ),
   ]);
 
-  const merged = mergeSearch(code.rows, website.rows, profile.rows, opts.search);
+  const merged = mergeSearch(code.rows, website.rows, opts.search);
   return {
     data: paginateLibraryEntries(merged, opts.page, opts.limit),
-    total: code.total + website.total + profile.total,
+    total: code.total + website.total,
     strategy: code.strategy,
   };
 }
