@@ -12,7 +12,7 @@ const SCREENSHOTS = [
   },
   {
     src: "/partner/events.png",
-    alt: "Analytics events: Design This, Builder Button Clicked, and CodeRabbit Click",
+    alt: "Analytics events: Design This and Builder Button Clicked",
     width: 600,
     height: 400,
   },
