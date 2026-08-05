@@ -21,6 +21,12 @@ const PARTNER_STATS = [
     period: "in 1 week",
     description: "Build This button clicks",
   },
+  {
+    name: "CodeRabbit",
+    visitors: "478",
+    period: "in 1 week",
+    description: "Sponsored banner clicks",
+  },
 ] as const;
 
 const TRAFFIC_STATS = [

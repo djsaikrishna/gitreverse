@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
 import { ReverseGenerationFlavorText } from "@/components/reverse-generation-flavor-text";
 import { useAuth } from "@/contexts/AuthContext";
@@ -604,6 +605,13 @@ export function ReversePromptHome({
                   {prompt}
                 </ReactMarkdown>
               </div>
+              {!loading ? (
+                <CodeRabbitBanner
+                  className="mt-4 w-full"
+                  embedded
+                  placement="repo-card"
+                />
+              ) : null}
             </section>
           </div>
         ) : null}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { CodeRabbitBanner } from "@/components/coderabbit-banner";
 import { Navbar } from "@/components/navbar";
 import type { LibraryEntry, SortOption } from "@/lib/library-types";
 
@@ -216,6 +217,8 @@ export function LibraryPage({ initialData, initialTotal }: LibraryPageProps) {
             </div>
           )}
         </div>
+
+        <CodeRabbitBanner className="w-full" placement="library" />
 
         {/* Count line */}
         {search ? (
