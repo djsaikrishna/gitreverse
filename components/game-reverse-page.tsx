@@ -294,6 +294,12 @@ export function GameReversePage({ gameSlug, gameName }: GameReversePageProps) {
                   Reverse engineered prompt
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <a
+                    href={`/specs/${encodeURIComponent(currentSlug)}`}
+                    className="text-xs font-medium text-zinc-600 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900 hover:decoration-zinc-900"
+                  >
+                    Open GAME.md
+                  </a>
                   <div className="group relative">
                     <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
                     <button
