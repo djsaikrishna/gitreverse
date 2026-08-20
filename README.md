@@ -32,7 +32,7 @@ The quick reverse endpoint supports five providers. Set **`GITREVERSE_QUICK_LLM`
 
 In `auto` mode the order of preference is: Grok → OpenRouter → Azure → Google → ApiSmart.
 
-ApiSmart is an [OpenAI-compatible](https://docs.apismart.ai/api-guides/chat-completions-api) gateway. Copy the exact Model ID from the [ApiSmart models](https://www.apismart.ai/models) page (IDs differ from display names). Pin it with `GITREVERSE_QUICK_LLM=apismart`.
+ApiSmart (sponsored) is an [OpenAI-compatible](https://docs.apismart.ai/api-guides/chat-completions-api) gateway. Copy the exact Model ID from the [ApiSmart models](https://www.apismart.ai/models) page (IDs differ from display names). Pin it with `GITREVERSE_QUICK_LLM=apismart`.
 
 Azure quick reverse uses `gpt-5.4` by default with `AZURE_OPENAI_REASONING_EFFORT=medium`. Title generation also uses Azure and defaults to `gpt-5.4-mini` with reasoning disabled.
 
@@ -78,4 +78,4 @@ pnpm start
 pnpm lint
 ```
 
-<!-- GitAds-Verify: QL21GOFX8CJONRKJCB9MHXMCF4ZIHRHF -->
+[Sponsor this readme](https://buy.stripe.com/3cIaEY15U6qE8LH8Esg7e01)
