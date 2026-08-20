@@ -28,7 +28,7 @@ The quick reverse endpoint supports five providers. Set **`GITREVERSE_QUICK_LLM`
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `google/gemini-2.5-pro` |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` | `AZURE_OPENAI_MODEL` | `gpt-5.4` |
 | Google AI Studio | `GOOGLE_GENERATIVE_AI_API_KEY` | `GOOGLE_AI_STUDIO_MODEL` | `gemini-2.5-pro` |
-| ApiSmart | `APISMART_API_KEY` | `APISMART_MODEL` | `DEEPSEEK_V4_FLASH` |
+| ApiSmart | `APISMART_API_KEY` | `APISMART_MODEL` | `deepseek-v4-flash` |
 
 In `auto` mode the order of preference is: Grok → OpenRouter → Azure → Google → ApiSmart.
 
