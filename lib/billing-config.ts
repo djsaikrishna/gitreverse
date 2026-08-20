@@ -43,6 +43,11 @@ export const STRIPE_PRICE_IDS = {
   unlimited: "price_1TfvMRIBG5KwEK8a5aETT5X8",
   credit: "price_1Tq9A8IBG5KwEK8aYIUW1fVp",
   partner: "price_1TwJ0DIBG5KwEK8ap7Eat9rn",
+  readmeSponsor: "price_1U67b0IBG5KwEK8aQMEzugW8",
+} as const;
+
+export const STRIPE_PAYMENT_LINKS = {
+  readmeSponsor: "https://buy.stripe.com/3cIaEY15U6qE8LH8Esg7e01",
 } as const;
 
 /** Hardcoded in reconcile_user_credits migration SQL — keep in sync. */
