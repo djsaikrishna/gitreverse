@@ -78,4 +78,4 @@ pnpm start
 pnpm lint
 ```
 
-[Sponsor this readme](https://buy.stripe.com/3cIaEY15U6qE8LH8Esg7e01)
+[Sponsor this readme](https://buy.stripe.com/dRmdRaaGu3es6Dz5sgg7e03)
