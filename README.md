@@ -20,7 +20,7 @@ Copy `.env.example` to `.env.local` and fill in at least one LLM API key.
 
 ### Quick LLM (required)
 
-The quick reverse endpoint supports four providers. Set **`GITREVERSE_QUICK_LLM`** to pin one, or leave it unset (`auto`) to let the app use whichever key it finds first:
+The quick reverse endpoint supports five providers. Set **`GITREVERSE_QUICK_LLM`** to pin one, or leave it unset (`auto`) to let the app use whichever key it finds first:
 
 | Provider | Key env var | Model env var | Default model |
 |---|---|---|---|
@@ -28,8 +28,11 @@ The quick reverse endpoint supports four providers. Set **`GITREVERSE_QUICK_LLM`
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `google/gemini-2.5-pro` |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` | `AZURE_OPENAI_MODEL` | `gpt-5.4` |
 | Google AI Studio | `GOOGLE_GENERATIVE_AI_API_KEY` | `GOOGLE_AI_STUDIO_MODEL` | `gemini-2.5-pro` |
+| ApiSmart | `APISMART_API_KEY` | `APISMART_MODEL` | `DEEPSEEK_V4_FLASH` |
 
-In `auto` mode the order of preference is: Grok → OpenRouter → Azure → Google.
+In `auto` mode the order of preference is: Grok → OpenRouter → Azure → Google → ApiSmart.
+
+ApiSmart is an [OpenAI-compatible](https://docs.apismart.ai/api-guides/chat-completions-api) gateway. Copy the exact Model ID from the [ApiSmart models](https://www.apismart.ai/models) page (IDs differ from display names). Pin it with `GITREVERSE_QUICK_LLM=apismart`.
 
 Azure quick reverse uses `gpt-5.4` by default with `AZURE_OPENAI_REASONING_EFFORT=medium`. Title generation also uses Azure and defaults to `gpt-5.4-mini` with reasoning disabled.
 
