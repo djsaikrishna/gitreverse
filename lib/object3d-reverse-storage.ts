@@ -11,8 +11,15 @@ export type Object3dReverseMeta = {
   metadata: Record<string, unknown> | null;
 };
 
+function isServerlessRuntime(): boolean {
+  return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
 function diskMetaPath(slug: string): string {
-  return path.join(process.cwd(), "data", "object3d-assets", slug, "meta.json");
+  const root = isServerlessRuntime()
+    ? path.join("/tmp", "object3d-assets")
+    : path.join(process.cwd(), "data", "object3d-assets");
+  return path.join(root, slug, "meta.json");
 }
 
 async function readDiskMeta(slug: string): Promise<Object3dReverseMeta | null> {
@@ -94,25 +101,39 @@ export async function writeObject3dReverse(opts: {
     metadata: opts.metadata ?? null,
   };
 
-  await writeDiskMeta(opts.slug, meta);
-
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (supabase) {
+    const { error } = await supabase.from("object3d_reverse_cache").upsert(
+      {
+        slug: opts.slug,
+        title: opts.title,
+        prompt: opts.prompt,
+        glb_filename: opts.glbFilename,
+        source_filename: opts.sourceFilename ?? null,
+        metadata: opts.metadata ?? null,
+        cached_at: meta.updatedAt,
+      },
+      { onConflict: "slug" }
+    );
 
-  const { error } = await supabase.from("object3d_reverse_cache").upsert(
-    {
-      slug: opts.slug,
-      title: opts.title,
-      prompt: opts.prompt,
-      glb_filename: opts.glbFilename,
-      source_filename: opts.sourceFilename ?? null,
-      metadata: opts.metadata ?? null,
-      cached_at: meta.updatedAt,
-    },
-    { onConflict: "slug" }
-  );
+    if (error) {
+      throw new Error(`Failed to save 3D reverse cache: ${error.message}`);
+    }
+  } else if (isServerlessRuntime()) {
+    throw new Error(
+      "Supabase is required to cache 3D reverses on Vercel. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY."
+    );
+  }
 
-  if (error) {
-    console.warn(`[object3d] supabase cache skipped: ${error.message}`);
+  try {
+    await writeDiskMeta(opts.slug, meta);
+  } catch (e) {
+    if (!supabase) {
+      throw e instanceof Error ? e : new Error(String(e));
+    }
+    console.warn(
+      `[object3d] disk meta skipped for ${opts.slug}:`,
+      e instanceof Error ? e.message : e
+    );
   }
 }
