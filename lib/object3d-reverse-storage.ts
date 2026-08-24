@@ -137,3 +137,29 @@ export async function writeObject3dReverse(opts: {
     );
   }
 }
+
+/** Bump usage counter for a cached 3D reverse (cache hits). */
+export async function incrementObject3dViews(slug: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc("increment_object3d_views", {
+    p_slug: slug,
+  });
+  if (error) {
+    // Fallback if RPC is missing: best-effort read-modify-write.
+    const { data } = await supabase
+      .from("object3d_reverse_cache")
+      .select("views")
+      .eq("slug", slug)
+      .maybeSingle();
+    const next = ((data?.views as number | null) ?? 0) + 1;
+    const { error: updateError } = await supabase
+      .from("object3d_reverse_cache")
+      .update({ views: next })
+      .eq("slug", slug);
+    if (updateError) {
+      console.warn(`[object3d] views increment skipped: ${updateError.message}`);
+    }
+  }
+}

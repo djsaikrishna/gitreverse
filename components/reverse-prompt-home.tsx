@@ -55,14 +55,21 @@ export function ReversePromptHome({
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const autoSubmitStartedRef = useRef(false);
 
-  /** Home: honor `?mode=website` for shareable website-reverse entry. */
+  /** Home: honor `?mode=website` / `?mode=3d` for shareable entry points. */
   useEffect(() => {
     if (!isHome || typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("mode")?.trim().toLowerCase() === "website") {
+    const mode = new URLSearchParams(window.location.search)
+      .get("mode")
+      ?.trim()
+      .toLowerCase();
+    if (mode === "3d") {
+      void router.replace("/3d");
+      return;
+    }
+    if (mode === "website") {
       setHomeMode("website");
     }
-  }, [isHome]);
+  }, [isHome, router]);
 
   const runReversePrompt = useCallback(async (input: string) => {
     setError(null);
@@ -110,9 +117,13 @@ export function ReversePromptHome({
     }
   }, []);
 
-  function setHomeModeAndUrl(next: "codebase" | "website") {
-    setHomeMode(next);
+  function setHomeModeAndUrl(next: "codebase" | "website" | "3d") {
     setError(null);
+    if (next === "3d") {
+      void router.push("/3d");
+      return;
+    }
+    setHomeMode(next);
     if (typeof window === "undefined" || !isHome) return;
     const url = new URL(window.location.href);
     if (next === "website") {
@@ -341,13 +352,23 @@ export function ReversePromptHome({
                 aria-selected={homeMode === "website"}
                 aria-pressed={homeMode === "website"}
                 onClick={() => setHomeModeAndUrl("website")}
-                className={`px-5 py-2.5 text-sm font-bold transition-colors ${
+                className={`border-r-[2.5px] border-zinc-900 px-5 py-2.5 text-sm font-bold transition-colors ${
                   homeMode === "website"
                     ? "bg-[#d31611] text-white"
                     : "bg-transparent text-zinc-600 hover:bg-zinc-50"
                 }`}
               >
                 Website
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                aria-pressed={false}
+                onClick={() => setHomeModeAndUrl("3d")}
+                className="bg-transparent px-5 py-2.5 text-sm font-bold text-zinc-600 transition-colors hover:bg-zinc-50"
+              >
+                3D
               </button>
             </div>
           ) : null}

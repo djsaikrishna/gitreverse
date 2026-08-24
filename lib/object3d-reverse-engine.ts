@@ -7,6 +7,7 @@ import {
 import { appendObject3dGlbInstructions } from "@/lib/object3d-prompt-utils";
 import { OBJECT3D_REVERSE_SYSTEM_PROMPT } from "@/lib/object3d-reverse-system-prompt";
 import {
+  incrementObject3dViews,
   readObject3dReverse,
   writeObject3dReverse,
 } from "@/lib/object3d-reverse-storage";
@@ -78,6 +79,12 @@ export async function ensureObject3dReversed(opts: {
           );
         });
       }
+      void incrementObject3dViews(slug).catch((e) => {
+        console.warn(
+          `[reverse-3d] views increment failed for ${slug}:`,
+          e instanceof Error ? e.message : e
+        );
+      });
       return {
         ok: true,
         slug,
@@ -198,6 +205,13 @@ export async function ensureObject3dReversed(opts: {
       status: 500,
     };
   }
+
+  void incrementObject3dViews(slug).catch((e) => {
+    console.warn(
+      `[reverse-3d] views increment failed for ${slug}:`,
+      e instanceof Error ? e.message : e
+    );
+  });
 
   return {
     ok: true,
