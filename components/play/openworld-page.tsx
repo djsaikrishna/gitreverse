@@ -56,12 +56,17 @@ export function OpenWorldPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (phase === "start" && (e.code === "Enter" || e.code === "Space")) {
+        e.preventDefault();
+        setPhase("loading");
+        return;
+      }
       if (e.code !== "Escape") return;
       setPhase((p) => (p === "play" ? "pause" : p === "pause" ? "play" : p));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [phase]);
 
   const clip =
     hud?.gait && hud.gait in LOCO_TO_CLIP
@@ -81,11 +86,6 @@ export function OpenWorldPage() {
           <p className="mt-3 max-w-lg text-center text-sm text-zinc-700">
             {GAME.setting}
           </p>
-          <ul className="mt-4 max-w-md list-disc space-y-1 pl-5 text-left text-sm text-zinc-800">
-            {GAME.howToPlay.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
           <button
             type="button"
             className="mt-6 rounded-md border-[3px] border-zinc-900 bg-[#d31611] px-6 py-3 text-sm font-bold text-white"
@@ -93,6 +93,11 @@ export function OpenWorldPage() {
           >
             Roam Cinder Bay
           </button>
+          <ul className="mt-6 max-w-md list-disc space-y-1 pl-5 text-left text-sm text-zinc-800">
+            {GAME.howToPlay.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         </div>
       ) : (
         <div className="relative min-h-[calc(100vh-4rem)] flex-1">

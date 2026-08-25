@@ -60,12 +60,17 @@ export function FootballPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (phase === "start" && (e.code === "Enter" || e.code === "Space")) {
+        e.preventDefault();
+        pick("home");
+        return;
+      }
       if (e.code !== "Escape") return;
       setPhase((p) => (p === "play" ? "pause" : p === "pause" ? "play" : p));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [phase]);
 
   const pick = (next: FootballTeamId) => {
     setTeam(next);
