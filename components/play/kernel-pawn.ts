@@ -49,8 +49,16 @@ export async function loadKernelGltf(): Promise<GLTF> {
 }
 
 export function cloneKernelGraph(gltf: GLTF): { scene: Object3D; clips: AnimationClip[] } {
+  const scene = cloneSkinned(gltf.scene);
+  scene.traverse((obj) => {
+    const mesh = obj as SkinnedMesh;
+    if (!mesh.isSkinnedMesh) return;
+    mesh.geometry = mesh.geometry.clone();
+    mesh.bind(mesh.skeleton, mesh.bindMatrix);
+    mesh.frustumCulled = false;
+  });
   return {
-    scene: cloneSkinned(gltf.scene),
+    scene,
     clips: gltf.animations.map((clip) => clip.clone()),
   };
 }
@@ -59,8 +67,8 @@ export class KernelPawn {
   readonly group: Group;
   readonly mixer: AnimationMixer;
   private readonly actions = new Map<string, AnimationAction>();
-  private readonly skinned: SkinnedMesh[] = [];
   private current: LocoClip | null = null;
+  private lastSwitch = 0;
 
   constructor(
     _THREE: typeof import("three"),
@@ -71,12 +79,6 @@ export class KernelPawn {
     const { scene: model, clips } = cloneKernelGraph(gltf);
     model.traverse((obj) => {
       const mesh = obj as SkinnedMesh;
-      if (mesh.isSkinnedMesh) {
-        this.skinned.push(mesh);
-        mesh.frustumCulled = false;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-      }
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -94,6 +96,7 @@ export class KernelPawn {
         return next;
       });
       mesh.material = cloned.length === 1 ? cloned[0]! : cloned;
+      if (mesh.isSkinnedMesh) mesh.bind(mesh.skeleton, mesh.bindMatrix);
     });
     this.group.add(model);
     this.mixer = new AnimationMixer(model);
@@ -115,8 +118,25 @@ export class KernelPawn {
     return this.current ? LOCO_TO_CLIP[this.current] : "A_TPose";
   }
 
+  get actionTime(): number {
+    if (!this.current) return 0;
+    return this.actions.get(LOCO_TO_CLIP[this.current])?.time ?? 0;
+  }
+
   play(loco: LocoClip, fade = KERNEL_FADE): void {
     if (this.current === loco) return;
+    const now =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : this.lastSwitch + 200;
+    if (
+      this.current &&
+      LOOPING.has(this.current) &&
+      LOOPING.has(loco) &&
+      now - this.lastSwitch < 140
+    ) {
+      return;
+    }
     const clipName = LOCO_TO_CLIP[loco];
     const next = this.actions.get(clipName);
     if (!next) return;
@@ -124,16 +144,20 @@ export class KernelPawn {
       this.current != null
         ? this.actions.get(LOCO_TO_CLIP[this.current])
         : undefined;
-    if (prev && prev !== next) prev.fadeOut(fade);
+    next.enabled = true;
+    next.paused = false;
     next.reset();
     next.setLoop(LOOPING.has(loco) ? LoopRepeat : LoopOnce, Infinity);
     next.clampWhenFinished = !LOOPING.has(loco);
     next.timeScale =
       loco === "jumpStart" || loco === "jumpLand" || loco === "interact" ? 1.35 : 1;
-    next.enabled = true;
     next.setEffectiveWeight(1);
-    next.fadeIn(this.current ? fade : 0).play();
+    next.play();
+    if (prev && prev !== next) {
+      next.crossFadeFrom(prev, this.current ? fade : 0, false);
+    }
     this.current = loco;
+    this.lastSwitch = now;
   }
 
   setPose(x: number, y: number, z: number, yaw: number): void {
@@ -142,9 +166,13 @@ export class KernelPawn {
   }
 
   update(dt: number): void {
+    const action =
+      this.current != null ? this.actions.get(LOCO_TO_CLIP[this.current]) : undefined;
+    if (action) {
+      action.paused = false;
+      action.enabled = true;
+    }
     this.mixer.update(dt);
-    this.group.updateMatrixWorld(true);
-    for (const mesh of this.skinned) mesh.skeleton.update();
   }
 
   addTo(scene: Scene): void {

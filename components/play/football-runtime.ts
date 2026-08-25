@@ -102,14 +102,17 @@ export async function bootFootball(
     }
     const fieldClips: string[] = [];
     let userClip = "Idle_Loop";
+    let aiTimes = "";
     for (const { player, pawn } of pawns) {
       pawn.play(gaitToLoco(player.gait));
       pawn.setPose(player.x, player.y, player.z, player.yaw);
       pawn.update(dt);
       if (!fieldClips.includes(pawn.clipName)) fieldClips.push(pawn.clipName);
       if (player.isUser) {
-        userClip = pawn.clipName;
+        userClip = `${pawn.clipName} ${pawn.actionTime.toFixed(2)}s`;
         userRing.position.set(player.x, 0.04, player.z);
+      } else if (!aiTimes && pawn.clipName !== "Idle_Loop") {
+        aiTimes = `${pawn.clipName} ${pawn.actionTime.toFixed(2)}s`;
       }
     }
     ball.position.set(state.ballX, state.ballY, state.ballZ);
@@ -127,7 +130,7 @@ export async function bootFootball(
     opts.onHud({
       ...footballHud(state),
       userClip,
-      fieldClips: fieldClips.join(" · "),
+      fieldClips: [aiTimes, ...fieldClips].filter(Boolean).join(" · "),
     });
   };
   tick();

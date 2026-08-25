@@ -283,6 +283,16 @@ test("cloned kernel graphs play independent clips on separate skeletons", async 
   const boneB = b.scene.getObjectByName("pelvis");
   assert.ok(boneA && boneB);
   assert.notEqual(boneA.uuid, boneB.uuid);
+  let skinnedA: import("three").SkinnedMesh | undefined;
+  a.scene.traverse((obj) => {
+    const mesh = obj as import("three").SkinnedMesh;
+    if (mesh.isSkinnedMesh && !skinnedA) skinnedA = mesh;
+  });
+  assert.ok(skinnedA);
+  assert.equal(
+    skinnedA.skeleton.bones.find((bone) => bone.name === "pelvis")?.uuid,
+    boneA.uuid
+  );
 
   const mixA = new AnimationMixer(a.scene);
   const mixB = new AnimationMixer(b.scene);
