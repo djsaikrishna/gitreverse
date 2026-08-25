@@ -9,7 +9,7 @@ import {
   type OpenWorldHud,
 } from "@/lib/play/openworld/sim";
 import type { LocoClip } from "@/lib/play/clips";
-import { KernelPawn, loadKernelGltf } from "@/components/play/kernel-pawn";
+import { KernelPawn } from "@/components/play/kernel-pawn";
 import {
   addCinderBayCity,
   createBag,
@@ -68,17 +68,17 @@ export async function bootOpenWorld(
 
   addCinderBayCity(THREE, scene, city);
 
-  const gltf = await loadKernelGltf();
-  const hero = new KernelPawn(THREE, gltf, { main: 0xc45c28, joints: 0x1e140e });
+  const hero = await KernelPawn.spawn(THREE, { main: 0xc45c28, joints: 0x1e140e });
   hero.addTo(scene);
   hero.play("idle");
 
-  const npcPawns = state.npcs.map((npc) => {
-    const pawn = new KernelPawn(THREE, gltf, NPC_KITS[npc.faction] ?? NPC_KITS.civilian!);
+  const npcPawns: Array<{ npc: (typeof state.npcs)[number]; pawn: KernelPawn }> = [];
+  for (const npc of state.npcs) {
+    const pawn = await KernelPawn.spawn(THREE, NPC_KITS[npc.faction] ?? NPC_KITS.civilian!);
     pawn.addTo(scene);
     pawn.play("walk");
-    return { npc, pawn };
-  });
+    npcPawns.push({ npc, pawn });
+  }
 
   const vehicleMeshes = state.vehicles.map((vehicle) => {
     const mesh = createVehicleMesh(THREE, vehicle.kind);

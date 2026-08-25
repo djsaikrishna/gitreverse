@@ -9,7 +9,7 @@ import {
   type FootballHud,
   type FootballTeamId,
 } from "@/lib/play/football/sim";
-import { KernelPawn, loadKernelGltf, type LocoClip } from "@/components/play/kernel-pawn";
+import { KernelPawn, type LocoClip } from "@/components/play/kernel-pawn";
 import { addFootballPitch, createBall } from "@/components/play/world-meshes";
 
 export type FootballHandle = {
@@ -60,13 +60,13 @@ export async function bootFootball(
 
   addFootballPitch(THREE, scene);
 
-  const gltf = await loadKernelGltf();
-  const pawns = state.players.map((player) => {
-    const pawn = new KernelPawn(THREE, gltf, FOOTBALL_KITS[player.team]);
+  const pawns: Array<{ player: (typeof state.players)[number]; pawn: KernelPawn }> = [];
+  for (const player of state.players) {
+    const pawn = await KernelPawn.spawn(THREE, FOOTBALL_KITS[player.team]);
     pawn.addTo(scene);
     pawn.play("idle");
-    return { player, pawn };
-  });
+    pawns.push({ player, pawn });
+  }
   const ball = createBall(THREE);
   scene.add(ball);
 

@@ -8,7 +8,6 @@ import {
   type Scene,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { QUATERNIUS_STANDARD_PUBLIC_PATH } from "@/lib/quaternius-kernel";
 import { KERNEL_FADE, LOCO_TO_CLIP, type LocoClip } from "@/lib/play/clips";
 
@@ -29,6 +28,20 @@ const LOOPING: ReadonlySet<LocoClip> = new Set([
   "dance",
 ]);
 
+let kernelBuffer: ArrayBuffer | null = null;
+
+/** Each call parses a fresh GLTF so mixers never share a skeleton. */
+export async function loadKernelGltf(): Promise<GLTF> {
+  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  const loader = new GLTFLoader();
+  if (!kernelBuffer) {
+    const res = await fetch(QUATERNIUS_STANDARD_PUBLIC_PATH);
+    if (!res.ok) throw new Error(`Failed to load kernel (${res.status})`);
+    kernelBuffer = await res.arrayBuffer();
+  }
+  return loader.parseAsync(kernelBuffer.slice(0), "/quaternius/");
+}
+
 export class KernelPawn {
   readonly group: Group;
   readonly mixer: AnimationMixer;
@@ -41,16 +54,13 @@ export class KernelPawn {
     kit: { main: number; joints: number }
   ) {
     this.group = new THREE.Group();
-    const model = cloneSkinned(gltf.scene) as Object3D;
+    const model = gltf.scene as Object3D;
     model.traverse((obj) => {
       const mesh = obj as import("three").SkinnedMesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
-      if (mesh.isSkinnedMesh) {
-        mesh.geometry = mesh.geometry.clone();
-      }
       const source = mesh.material;
       const list = Array.isArray(source) ? source : [source];
       const cloned = list.map((mat) => {
@@ -71,8 +81,15 @@ export class KernelPawn {
     const needed = new Set<string>(Object.values(LOCO_TO_CLIP));
     for (const clip of gltf.animations) {
       if (!needed.has(clip.name)) continue;
-      this.actions.set(clip.name, this.mixer.clipAction(clip.clone()));
+      this.actions.set(clip.name, this.mixer.clipAction(clip));
     }
+  }
+
+  static async spawn(
+    THREE: typeof import("three"),
+    kit: { main: number; joints: number }
+  ): Promise<KernelPawn> {
+    return new KernelPawn(THREE, await loadKernelGltf(), kit);
   }
 
   play(loco: LocoClip, fade = KERNEL_FADE): void {
@@ -113,9 +130,4 @@ export class KernelPawn {
     this.mixer.stopAllAction();
     this.group.removeFromParent();
   }
-}
-
-export async function loadKernelGltf(): Promise<GLTF> {
-  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
-  return new GLTFLoader().loadAsync(QUATERNIUS_STANDARD_PUBLIC_PATH);
 }
