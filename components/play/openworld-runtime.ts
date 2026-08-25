@@ -72,13 +72,14 @@ export async function bootOpenWorld(
   hero.addTo(scene);
   hero.play("idle");
 
-  const npcPawns: Array<{ npc: (typeof state.npcs)[number]; pawn: KernelPawn }> = [];
-  for (const npc of state.npcs) {
-    const pawn = await KernelPawn.spawn(THREE, NPC_KITS[npc.faction] ?? NPC_KITS.civilian!);
-    pawn.addTo(scene);
-    pawn.play("walk");
-    npcPawns.push({ npc, pawn });
-  }
+  const npcPawns = await Promise.all(
+    state.npcs.map(async (npc) => {
+      const pawn = await KernelPawn.spawn(THREE, NPC_KITS[npc.faction] ?? NPC_KITS.civilian!);
+      pawn.addTo(scene);
+      pawn.play("walk");
+      return { npc, pawn };
+    })
+  );
 
   const vehicleMeshes = state.vehicles.map((vehicle) => {
     const mesh = createVehicleMesh(THREE, vehicle.kind);

@@ -60,13 +60,14 @@ export async function bootFootball(
 
   addFootballPitch(THREE, scene);
 
-  const pawns: Array<{ player: (typeof state.players)[number]; pawn: KernelPawn }> = [];
-  for (const player of state.players) {
-    const pawn = await KernelPawn.spawn(THREE, FOOTBALL_KITS[player.team]);
-    pawn.addTo(scene);
-    pawn.play("idle");
-    pawns.push({ player, pawn });
-  }
+  const pawns = await Promise.all(
+    state.players.map(async (player) => {
+      const pawn = await KernelPawn.spawn(THREE, FOOTBALL_KITS[player.team]);
+      pawn.addTo(scene);
+      pawn.play("idle");
+      return { player, pawn };
+    })
+  );
   const ball = createBall(THREE);
   scene.add(ball);
 

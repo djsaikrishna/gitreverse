@@ -31,21 +31,17 @@ const LOOPING: ReadonlySet<LocoClip> = new Set([
   "dance",
 ]);
 
-let sourceGltf: GLTF | null = null;
-let sourceLoading: Promise<GLTF> | null = null;
+let kernelBuffer: ArrayBuffer | null = null;
 
-/** Load the in-place Universal kernel once. Pawns clone this graph; they never share a skeleton. */
+/** Each spawn parses a fresh GLB so mixers never share a skeleton or clip. */
 export async function loadKernelGltf(): Promise<GLTF> {
-  if (sourceGltf) return sourceGltf;
-  if (!sourceLoading) {
-    sourceLoading = (async () => {
-      const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
-      const gltf = await new GLTFLoader().loadAsync(QUATERNIUS_STANDARD_PUBLIC_PATH);
-      sourceGltf = gltf;
-      return gltf;
-    })();
+  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  if (!kernelBuffer) {
+    const res = await fetch(QUATERNIUS_STANDARD_PUBLIC_PATH);
+    if (!res.ok) throw new Error(`Failed to load kernel (${res.status})`);
+    kernelBuffer = await res.arrayBuffer();
   }
-  return sourceLoading;
+  return new GLTFLoader().parseAsync(kernelBuffer.slice(0), "/quaternius/");
 }
 
 export function cloneKernelGraph(gltf: GLTF): { scene: Object3D; clips: AnimationClip[] } {
@@ -75,9 +71,14 @@ export class KernelPawn {
     kit: { main: number; joints: number }
   ) {
     this.group = new Group();
-    const { scene: model, clips } = cloneKernelGraph(gltf);
+    const model = gltf.scene;
     model.traverse((obj) => {
       const mesh = obj as SkinnedMesh;
+      if (mesh.isSkinnedMesh) {
+        mesh.geometry = mesh.geometry.clone();
+        mesh.bind(mesh.skeleton, mesh.bindMatrix);
+        mesh.frustumCulled = false;
+      }
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -100,9 +101,9 @@ export class KernelPawn {
     this.group.add(model);
     this.mixer = new AnimationMixer(model);
     const needed = new Set<string>(Object.values(LOCO_TO_CLIP));
-    for (const clip of clips) {
+    for (const clip of gltf.animations) {
       if (!needed.has(clip.name)) continue;
-      this.actions.set(clip.name, this.mixer.clipAction(clip));
+      this.actions.set(clip.name, this.mixer.clipAction(clip.clone()));
     }
   }
 
