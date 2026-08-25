@@ -5,6 +5,7 @@ import {
   LoopRepeat,
   type AnimationAction,
   type AnimationClip,
+  type Bone,
   type Object3D,
   type Scene,
   type SkinnedMesh,
@@ -164,8 +165,25 @@ export class KernelPawn {
     this.mixer.update(dt);
   }
 
-  addTo(scene: Scene): void {
-    scene.add(this.group);
+  bones(): Bone[] {
+    const out: Bone[] = [];
+    this.group.traverse((obj) => {
+      const bone = obj as Bone;
+      if (bone.isBone) out.push(bone);
+    });
+    return out;
+  }
+
+  /** Copy local bone TRS from another pawn. Used to verify clone skinning. */
+  copyBonesFrom(source: KernelPawn): void {
+    const src = new Map(source.bones().map((bone) => [bone.name, bone]));
+    for (const bone of this.bones()) {
+      const from = src.get(bone.name);
+      if (!from) continue;
+      bone.position.copy(from.position);
+      bone.quaternion.copy(from.quaternion);
+      bone.scale.copy(from.scale);
+    }
   }
 
   dispose(): void {
