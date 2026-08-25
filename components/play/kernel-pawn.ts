@@ -63,11 +63,17 @@ export class KernelPawn {
     });
     this.group.add(model);
     this.mixer = new AnimationMixer(model);
+    const needed = new Set<string>(Object.values(LOCO_TO_CLIP));
     for (const clip of gltf.animations) {
-      const action = this.mixer.clipAction(clip);
+      if (!needed.has(clip.name)) continue;
+      const action = this.mixer.clipAction(clip.clone());
       action.enabled = true;
       this.actions.set(clip.name, action);
     }
+    model.traverse((obj) => {
+      const mesh = obj as import("three").SkinnedMesh;
+      if (mesh.isSkinnedMesh) mesh.frustumCulled = false;
+    });
   }
 
   play(loco: LocoClip, fade = KERNEL_FADE): void {
