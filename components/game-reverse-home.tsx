@@ -132,7 +132,28 @@ export function GameReverseHome() {
               >
                 websites
               </Link>{" "}
-              on the home page.
+              on the home page. Play the kernel slices at{" "}
+              <Link
+                href="/play"
+                className="font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900"
+              >
+                /play
+              </Link>
+              :{" "}
+              <Link
+                href="/play/openworld"
+                className="font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900"
+              >
+                Cinder Bay
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/play/football"
+                className="font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900"
+              >
+                Floodlight Eleven
+              </Link>
+              .
             </p>
           </div>
         </div>
