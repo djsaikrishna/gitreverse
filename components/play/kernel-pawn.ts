@@ -5,7 +5,6 @@ import {
   LoopRepeat,
   type AnimationAction,
   type AnimationClip,
-  type Bone,
   type Object3D,
   type Scene,
   type SkinnedMesh,
@@ -50,7 +49,6 @@ export function cloneKernelGraph(gltf: GLTF): { scene: Object3D; clips: Animatio
   scene.traverse((obj) => {
     const mesh = obj as SkinnedMesh;
     if (!mesh.isSkinnedMesh) return;
-    mesh.geometry = mesh.geometry.clone();
     mesh.bind(mesh.skeleton, mesh.bindMatrix);
     mesh.frustumCulled = false;
   });
@@ -73,12 +71,13 @@ export class KernelPawn {
   ) {
     this.group = new Group();
     const model = gltf.scene;
+    let skin: SkinnedMesh | null = null;
     model.traverse((obj) => {
       const mesh = obj as SkinnedMesh;
       if (mesh.isSkinnedMesh) {
-        mesh.geometry = mesh.geometry.clone();
-        mesh.bind(mesh.skeleton, mesh.bindMatrix);
         mesh.frustumCulled = false;
+        mesh.bind(mesh.skeleton, mesh.bindMatrix);
+        if (!skin) skin = mesh;
       }
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
@@ -97,10 +96,10 @@ export class KernelPawn {
         return next;
       });
       mesh.material = cloned.length === 1 ? cloned[0]! : cloned;
-      if (mesh.isSkinnedMesh) mesh.bind(mesh.skeleton, mesh.bindMatrix);
     });
     this.group.add(model);
-    this.mixer = new AnimationMixer(model);
+    // Bind tracks to skeleton.bones (the deform joints), not only scene-graph names.
+    this.mixer = new AnimationMixer(skin ?? model);
     const needed = new Set<string>(Object.values(LOCO_TO_CLIP));
     for (const clip of gltf.animations) {
       if (!needed.has(clip.name)) continue;
@@ -165,25 +164,8 @@ export class KernelPawn {
     this.mixer.update(dt);
   }
 
-  bones(): Bone[] {
-    const out: Bone[] = [];
-    this.group.traverse((obj) => {
-      const bone = obj as Bone;
-      if (bone.isBone) out.push(bone);
-    });
-    return out;
-  }
-
-  /** Copy local bone TRS from another pawn. Used to verify clone skinning. */
-  copyBonesFrom(source: KernelPawn): void {
-    const src = new Map(source.bones().map((bone) => [bone.name, bone]));
-    for (const bone of this.bones()) {
-      const from = src.get(bone.name);
-      if (!from) continue;
-      bone.position.copy(from.position);
-      bone.quaternion.copy(from.quaternion);
-      bone.scale.copy(from.scale);
-    }
+  addTo(scene: Scene): void {
+    scene.add(this.group);
   }
 
   dispose(): void {

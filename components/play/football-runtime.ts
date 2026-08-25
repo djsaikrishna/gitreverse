@@ -104,7 +104,6 @@ export async function bootFootball(
     const fieldClips: string[] = [];
     let userClip = "Idle_Loop";
     let aiTimes = "";
-    let userPawn: KernelPawn | null = null;
     for (const { player, pawn } of pawns) {
       pawn.play(gaitToLoco(player.gait));
       pawn.setPose(player.x, player.y, player.z, player.yaw);
@@ -112,15 +111,9 @@ export async function bootFootball(
       if (!fieldClips.includes(pawn.clipName)) fieldClips.push(pawn.clipName);
       if (player.isUser) {
         userClip = `${pawn.clipName} ${pawn.actionTime.toFixed(2)}s`;
-        userPawn = pawn;
         userRing.position.set(player.x, 0.04, player.z);
       } else if (!aiTimes && pawn.clipName !== "Idle_Loop") {
         aiTimes = `${pawn.clipName} ${pawn.actionTime.toFixed(2)}s`;
-      }
-    }
-    if (userPawn) {
-      for (const { player, pawn } of pawns) {
-        if (!player.isUser) pawn.copyBonesFrom(userPawn);
       }
     }
     ball.position.set(state.ballX, state.ballY, state.ballZ);
