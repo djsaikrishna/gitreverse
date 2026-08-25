@@ -158,8 +158,6 @@ export class KernelPawn {
         action.clampWhenFinished = false;
         action.setLoop(LoopRepeat, Infinity);
         if (action.getEffectiveWeight() < 0.5) action.setEffectiveWeight(1);
-        const clip = action.getClip();
-        if (clip && action.time >= clip.duration) action.time = 0;
       }
     }
     this.mixer.update(dt);
