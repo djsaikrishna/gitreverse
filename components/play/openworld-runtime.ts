@@ -103,7 +103,7 @@ export async function bootOpenWorld(
   const onMove = (e: PointerEvent) => {
     if (!dragging) return;
     orbitYaw -= (e.clientX - lastX) * 0.005;
-    orbitPitch = Math.max(-0.1, Math.min(0.7, orbitPitch + (e.clientY - lastY) * 0.004));
+    orbitPitch = Math.max(0.05, Math.min(0.55, orbitPitch + (e.clientY - lastY) * 0.004));
     lastX = e.clientX;
     lastY = e.clientY;
   };
@@ -156,8 +156,8 @@ export async function bootOpenWorld(
     bag.position.set(state.bag.x, state.bagHeld ? 0.85 : 0.22, state.bag.z);
     bag.visible = !state.bag.taken || state.bagHeld;
 
-    const dist = state.vehicleId ? 9.2 : 6.5;
-    const height = state.vehicleId ? 3.4 : 2.25;
+    const dist = state.vehicleId ? 10.2 : 7.6;
+    const height = state.vehicleId ? 3.6 : 2.55;
     const yaw = state.playerYaw + orbitYaw;
     camera.position.lerp(
       new THREE.Vector3(
