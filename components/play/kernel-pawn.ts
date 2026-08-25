@@ -43,10 +43,14 @@ export class KernelPawn {
     this.group = new THREE.Group();
     const model = cloneSkinned(gltf.scene) as Object3D;
     model.traverse((obj) => {
-      const mesh = obj as import("three").Mesh;
+      const mesh = obj as import("three").SkinnedMesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+      if (mesh.isSkinnedMesh) {
+        mesh.geometry = mesh.geometry.clone();
+      }
       const source = mesh.material;
       const list = Array.isArray(source) ? source : [source];
       const cloned = list.map((mat) => {
@@ -62,18 +66,13 @@ export class KernelPawn {
       mesh.material = cloned.length === 1 ? cloned[0]! : cloned;
     });
     this.group.add(model);
-    this.mixer = new AnimationMixer(model);
+    const armature = model.getObjectByName("Armature") ?? model;
+    this.mixer = new AnimationMixer(armature);
     const needed = new Set<string>(Object.values(LOCO_TO_CLIP));
     for (const clip of gltf.animations) {
       if (!needed.has(clip.name)) continue;
-      const action = this.mixer.clipAction(clip.clone());
-      action.enabled = true;
-      this.actions.set(clip.name, action);
+      this.actions.set(clip.name, this.mixer.clipAction(clip.clone()));
     }
-    model.traverse((obj) => {
-      const mesh = obj as import("three").SkinnedMesh;
-      if (mesh.isSkinnedMesh) mesh.frustumCulled = false;
-    });
   }
 
   play(loco: LocoClip, fade = KERNEL_FADE): void {
@@ -81,15 +80,19 @@ export class KernelPawn {
     const clipName = LOCO_TO_CLIP[loco];
     const next = this.actions.get(clipName);
     if (!next) return;
-    for (const action of this.actions.values()) {
-      if (action !== next) action.fadeOut(fade);
-    }
+    const prev =
+      this.current != null
+        ? this.actions.get(LOCO_TO_CLIP[this.current])
+        : undefined;
+    if (prev && prev !== next) prev.fadeOut(fade);
     next.reset();
     next.setLoop(LOOPING.has(loco) ? LoopRepeat : LoopOnce, Infinity);
     next.clampWhenFinished = !LOOPING.has(loco);
     next.timeScale =
       loco === "jumpStart" || loco === "jumpLand" || loco === "interact" ? 1.35 : 1;
-    next.fadeIn(fade).play();
+    next.enabled = true;
+    next.setEffectiveWeight(1);
+    next.fadeIn(this.current ? fade : 0).play();
     this.current = loco;
   }
 
