@@ -35,7 +35,11 @@ export function OpenWorldPage() {
         onHud: setHud,
         isPlaying: () => playingRef.current,
       });
-      if (!disposed) setPhase((p) => (p === "loading" ? "play" : p));
+      if (disposed) {
+        handle.dispose();
+        return;
+      }
+      setPhase((p) => (p === "loading" ? "play" : p));
     })().catch((e) => {
       if (!disposed) setError(e instanceof Error ? e.message : String(e));
     });

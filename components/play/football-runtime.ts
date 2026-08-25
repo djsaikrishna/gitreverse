@@ -100,11 +100,15 @@ export async function bootFootball(
     if (opts.isPlaying()) {
       stepFootball(state, intent, dt, camYaw);
     }
+    const fieldClips: string[] = [];
+    let userClip = "Idle_Loop";
     for (const { player, pawn } of pawns) {
       pawn.play(gaitToLoco(player.gait));
       pawn.setPose(player.x, player.y, player.z, player.yaw);
       pawn.update(dt);
+      if (!fieldClips.includes(pawn.clipName)) fieldClips.push(pawn.clipName);
       if (player.isUser) {
+        userClip = pawn.clipName;
         userRing.position.set(player.x, 0.04, player.z);
       }
     }
@@ -112,11 +116,19 @@ export async function bootFootball(
     ball.rotation.x += state.ballVz * dt * 0.4;
     ball.rotation.z -= state.ballVx * dt * 0.4;
 
-    const behind = opts.userTeam === "home" ? -18 : 18;
-    camera.position.lerp(new THREE.Vector3(state.ballX + behind, 13, state.ballZ * 0.42), 0.08);
-    camera.lookAt(state.ballX, 0.6, state.ballZ);
+    const behind = opts.userTeam === "home" ? -14 : 14;
+    const sideline = opts.userTeam === "home" ? 7.5 : -7.5;
+    camera.position.lerp(
+      new THREE.Vector3(state.ballX + behind, 7.6, state.ballZ * 0.35 + sideline),
+      0.08
+    );
+    camera.lookAt(state.ballX, 0.7, state.ballZ);
     renderer.render(scene, camera);
-    opts.onHud(footballHud(state));
+    opts.onHud({
+      ...footballHud(state),
+      userClip,
+      fieldClips: fieldClips.join(" · "),
+    });
   };
   tick();
 

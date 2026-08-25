@@ -235,6 +235,70 @@ test("Cinder Bay crouch and punch use kernel gaits", () => {
   );
 });
 
+test("Floodlight Eleven AI keeps locomotion clips after kickoff", () => {
+  const state = createFootballState("home");
+  const idle = {
+    axisX: 0,
+    axisZ: 0,
+    sprint: false,
+    crouch: false,
+    jump: false,
+    header: false,
+    interact: false,
+    punch: false,
+    pass: false,
+    shoot: false,
+    pause: false,
+    restart: false,
+  };
+  for (let i = 0; i < 80; i++) {
+    stepFootball(state, idle, 0.05, Math.PI / 2);
+  }
+  assert.equal(state.phase, "play");
+  const moving = state.players.filter(
+    (p) => !p.isUser && (p.gait === "walk" || p.gait === "jog" || p.gait === "sprint")
+  );
+  assert.ok(
+    moving.length >= 4,
+    `expected 4+ AI in locomotion, got ${state.players.map((p) => `${p.id}:${p.gait}`).join(" ")}`
+  );
+});
+
+test("cloned kernel graphs play independent clips on separate skeletons", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { AnimationMixer, LoopRepeat } = await import("three");
+  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  const { cloneKernelGraph } = await import("../components/play/kernel-pawn");
+  const { quaterniusStandardDiskPath } = await import("../lib/quaternius-kernel");
+  const data = readFileSync(quaterniusStandardDiskPath());
+  const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  const gltf = await new Promise<import("three/examples/jsm/loaders/GLTFLoader.js").GLTF>(
+    (resolve, reject) => {
+      new GLTFLoader().parse(ab, "/quaternius/", resolve, reject);
+    }
+  );
+  const a = cloneKernelGraph(gltf);
+  const b = cloneKernelGraph(gltf);
+  const boneA = a.scene.getObjectByName("pelvis");
+  const boneB = b.scene.getObjectByName("pelvis");
+  assert.ok(boneA && boneB);
+  assert.notEqual(boneA.uuid, boneB.uuid);
+
+  const mixA = new AnimationMixer(a.scene);
+  const mixB = new AnimationMixer(b.scene);
+  const idle = a.clips.find((c) => c.name === "Idle_Loop");
+  const jog = b.clips.find((c) => c.name === "Jog_Fwd_Loop");
+  assert.ok(idle && jog);
+  mixA.clipAction(idle).setLoop(LoopRepeat, Infinity).play();
+  mixB.clipAction(jog).setLoop(LoopRepeat, Infinity).play();
+  for (let i = 0; i < 20; i++) {
+    mixA.update(1 / 30);
+    mixB.update(1 / 30);
+  }
+  assert.notEqual(boneA.quaternion.x.toFixed(4), boneB.quaternion.x.toFixed(4));
+  assert.notEqual(boneA.quaternion.y.toFixed(4), boneB.quaternion.y.toFixed(4));
+});
+
 test("Floodlight Eleven kickoff, shot, goal, and whistle", () => {
   const state = createFootballState("home");
   assert.equal(FOOTBALL_TEAMS.home.name, "Harbor Rovers");

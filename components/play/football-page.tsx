@@ -39,7 +39,11 @@ export function FootballPage() {
         onHud: setHud,
         isPlaying: () => playingRef.current,
       });
-      if (!disposed) setPhase((p) => (p === "loading" ? "play" : p));
+      if (disposed) {
+        handle.dispose();
+        return;
+      }
+      setPhase((p) => (p === "loading" ? "play" : p));
     })().catch((e) => {
       if (!disposed) setError(e instanceof Error ? e.message : String(e));
     });
@@ -123,6 +127,9 @@ export function FootballPage() {
                 {hud.home} {hud.scoreHome}–{hud.scoreAway} {hud.away}
               </p>
               <p className="mt-1 text-sm font-bold text-[#ffe08a]">{hud.clock} · {hud.event}</p>
+              <p className="mt-1 font-mono text-[11px] text-[#9fd8d4]">
+                You {hud.userClip} · Field {hud.fieldClips}
+              </p>
               <p className="mt-2 text-[11px] text-zinc-400">{hud.hint}</p>
             </div>
           ) : null}

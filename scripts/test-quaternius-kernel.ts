@@ -31,6 +31,12 @@ test("kernel clip and joint tables match the vendored GLB contract", () => {
   assert.equal(GAME_ACTION_TO_CLIP.shot, "Interact");
   assert.equal(GAME_ACTION_TO_CLIP.keeperDive, "Roll");
   assert.equal(GAME_ACTION_TO_CLIP.crouch, "Crouch_Idle_Loop");
+  assert.deepEqual(resolveGameClip("header"), ["Jump_Start", "Jump_Loop", "Jump_Land"]);
+  assert.equal(GAME_ACTION_TO_CLIP.celebration, "Dance_Loop");
+  assert.equal(GAME_ACTION_TO_CLIP.enterSeat, "Sitting_Enter");
+  assert.equal(GAME_ACTION_TO_CLIP.exitSeat, "Sitting_Exit");
+  assert.notEqual(GAME_ACTION_TO_CLIP.shot, "Punch_Jab");
+  assert.notEqual(GAME_ACTION_TO_CLIP.shot, "Sword_Attack");
   assert.equal(isDeformJoint("root"), false);
   assert.equal(isDeformJoint("index_04_leaf_l"), false);
   assert.equal(isDeformJoint("upperarm_l"), true);

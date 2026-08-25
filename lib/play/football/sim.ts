@@ -1,5 +1,6 @@
 import type { PlayIntent } from "@/lib/play/input";
 import { dist2 } from "@/lib/play/aabb";
+import { LOCO_TO_CLIP } from "@/lib/play/clips";
 
 export type FootballTeamId = "home" | "away";
 export type FootballRole = "gk" | "def" | "mid" | "fwd";
@@ -63,6 +64,8 @@ export type FootballHud = {
   hint: string;
   phase: FootballPhase;
   userTeam: FootballTeamId;
+  userClip: string;
+  fieldClips: string;
 };
 
 export const PITCH = {
@@ -299,9 +302,12 @@ function aiThink(state: FootballState, player: FootballPlayer, dt: number): void
         dist2(a.x, a.z, state.ballX, state.ballZ) - dist2(b.x, b.z, state.ballX, state.ballZ)
     )[0];
   const onBall = closest?.id === player.id;
+  const phase = state.clock * 2.2 + player.number * 0.85;
+  const wobbleX = Math.sin(phase) * 2.4;
+  const wobbleZ = Math.cos(phase * 0.82) * 1.8;
 
   if (player.role === "gk") {
-    const tz = clamp(state.ballZ, -4.5, 4.5);
+    const tz = clamp(state.ballZ * 0.7 + Math.sin(state.clock * 1.6) * 1.1, -4.5, 4.5);
     const tx = player.team === "home" ? -21.2 : 21.2;
     movePlayer(player, tx, tz, toBall < 8, dt);
     const shotIncoming =
@@ -337,9 +343,14 @@ function aiThink(state: FootballState, player: FootballPlayer, dt: number): void
     return;
   }
 
-  const supportX = base.x * 0.55 + state.ballX * 0.45;
-  const supportZ = base.z * 0.7 + state.ballZ * 0.3;
-  movePlayer(player, supportX, supportZ, toBall < 10, dt);
+  const press = toBall < 16;
+  const supportX = press
+    ? state.ballX * 0.62 + base.x * 0.38 + wobbleX * 0.4
+    : base.x * 0.48 + state.ballX * 0.52 + wobbleX;
+  const supportZ = press
+    ? state.ballZ * 0.68 + base.z * 0.32 + wobbleZ * 0.4
+    : base.z * 0.5 + state.ballZ * 0.5 + wobbleZ;
+  movePlayer(player, supportX, supportZ, toBall < 12, dt);
 }
 
 function stepBall(state: FootballState, dt: number): boolean {
@@ -504,6 +515,8 @@ function whistleFullTime(state: FootballState): void {
 }
 
 export function footballHud(state: FootballState): FootballHud {
+  const user = state.players.find((p) => p.isUser);
+  const clips = [...new Set(state.players.map((p) => LOCO_TO_CLIP[p.gait] ?? p.gait))];
   return {
     title: "Floodlight Eleven",
     home: FOOTBALL_TEAMS.home.name,
@@ -518,5 +531,7 @@ export function footballHud(state: FootballState): FootballHud {
         : "WASD move · Shift sprint · F pass · Space shoot · C header · Esc pause",
     phase: state.phase,
     userTeam: state.userTeam,
+    userClip: user ? LOCO_TO_CLIP[user.gait] ?? user.gait : "Idle_Loop",
+    fieldClips: clips.join(" · "),
   };
 }
