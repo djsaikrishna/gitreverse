@@ -68,7 +68,6 @@ export class KernelPawn {
   readonly mixer: AnimationMixer;
   private readonly actions = new Map<string, AnimationAction>();
   private current: LocoClip | null = null;
-  private lastSwitch = 0;
 
   constructor(
     _THREE: typeof import("three"),
@@ -125,18 +124,6 @@ export class KernelPawn {
 
   play(loco: LocoClip, fade = KERNEL_FADE): void {
     if (this.current === loco) return;
-    const now =
-      typeof performance !== "undefined" && typeof performance.now === "function"
-        ? performance.now()
-        : this.lastSwitch + 200;
-    if (
-      this.current &&
-      LOOPING.has(this.current) &&
-      LOOPING.has(loco) &&
-      now - this.lastSwitch < 140
-    ) {
-      return;
-    }
     const clipName = LOCO_TO_CLIP[loco];
     const next = this.actions.get(clipName);
     if (!next) return;
@@ -144,20 +131,17 @@ export class KernelPawn {
       this.current != null
         ? this.actions.get(LOCO_TO_CLIP[this.current])
         : undefined;
-    next.enabled = true;
-    next.paused = false;
+    if (prev && prev !== next) prev.fadeOut(fade);
     next.reset();
     next.setLoop(LOOPING.has(loco) ? LoopRepeat : LoopOnce, Infinity);
     next.clampWhenFinished = !LOOPING.has(loco);
     next.timeScale =
       loco === "jumpStart" || loco === "jumpLand" || loco === "interact" ? 1.35 : 1;
+    next.paused = false;
+    next.enabled = true;
     next.setEffectiveWeight(1);
-    next.play();
-    if (prev && prev !== next) {
-      next.crossFadeFrom(prev, this.current ? fade : 0, false);
-    }
+    next.fadeIn(this.current ? fade : 0).play();
     this.current = loco;
-    this.lastSwitch = now;
   }
 
   setPose(x: number, y: number, z: number, yaw: number): void {
@@ -166,11 +150,17 @@ export class KernelPawn {
   }
 
   update(dt: number): void {
-    const action =
-      this.current != null ? this.actions.get(LOCO_TO_CLIP[this.current]) : undefined;
-    if (action) {
-      action.paused = false;
-      action.enabled = true;
+    if (this.current && LOOPING.has(this.current)) {
+      const action = this.actions.get(LOCO_TO_CLIP[this.current]);
+      if (action) {
+        action.paused = false;
+        action.enabled = true;
+        action.clampWhenFinished = false;
+        action.setLoop(LoopRepeat, Infinity);
+        if (action.getEffectiveWeight() < 0.5) action.setEffectiveWeight(1);
+        const clip = action.getClip();
+        if (clip && action.time >= clip.duration) action.time = 0;
+      }
     }
     this.mixer.update(dt);
   }
