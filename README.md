@@ -58,6 +58,7 @@ If your Azure resource does not yet have an embedding deployment, you can tempor
 | Path | Description |
 |---|---|
 | `/` | Home — quick reverse (codebase or website) |
+| `/game` | Game reverse — GAME.md spec + Cursor-ready build prompt |
 | `/library` | Browse cached quick prompts (requires Supabase) |
 | `/history` | Your prompt history (profile menu when signed in; syncs to Supabase) |
 | `/[owner]/[repo]` | Shareable quick-reverse link |

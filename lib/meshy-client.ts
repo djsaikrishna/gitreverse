@@ -12,6 +12,12 @@ type MeshyTask = {
   progress?: number;
   task_error?: { message?: string } | string | null;
   model_urls?: { glb?: string };
+  result?: {
+    rigged_character_glb_url?: string;
+    basic_animations?: {
+      walking_glb_url?: string;
+    };
+  };
 };
 
 function authHeaders(apiKey: string): HeadersInit {
@@ -49,7 +55,7 @@ async function meshyJson<T>(
   return { ok: true, data: data as T };
 }
 
-function remainingMs(deadlineAt?: number, fallback = 240_000): number {
+function remainingMs(deadlineAt?: number, fallback = 180_000): number {
   if (!deadlineAt) return fallback;
   return Math.max(0, deadlineAt - Date.now());
 }
@@ -89,6 +95,138 @@ export async function downloadBinary(url: string): Promise<Buffer> {
     throw new Error(`Failed to download Meshy asset (${res.status})`);
   }
   return Buffer.from(await res.arrayBuffer());
+}
+
+export async function generateTexturedGlb(opts: {
+  apiKey: string;
+  prompt: string;
+  poseMode?: "a-pose" | "t-pose" | "";
+  timeoutMs?: number;
+  deadlineAt?: number;
+  onStatus?: (message: string) => void;
+}): Promise<
+  | { ok: true; glb: Buffer; refineTaskId: string | null }
+  | { ok: false; error: string }
+> {
+  opts.onStatus?.("Sculpting hero mesh");
+  const preview = await meshyJson<MeshyCreateResponse>(
+    `${MESHY_BASE}/v2/text-to-3d`,
+    {
+      method: "POST",
+      headers: authHeaders(opts.apiKey),
+      body: JSON.stringify({
+        mode: "preview",
+        prompt: opts.prompt,
+        pose_mode: opts.poseMode ?? "",
+        should_remesh: true,
+        target_polycount: 30000,
+        target_formats: ["glb"],
+        ai_model: "latest",
+      }),
+    }
+  );
+  if (!preview.ok || !preview.data.result) {
+    return { ok: false, error: preview.ok ? "Meshy preview missing id" : preview.error };
+  }
+
+  const previewDone = await pollTask({
+    url: `${MESHY_BASE}/v2/text-to-3d/${preview.data.result}`,
+    apiKey: opts.apiKey,
+    timeoutMs: remainingMs(opts.deadlineAt, opts.timeoutMs ?? 180_000),
+    onProgress: (p, s) => opts.onStatus?.(`Sculpting hero mesh (${p}% ${s})`),
+  });
+  if (!previewDone.ok) return previewDone;
+
+  const previewGlbUrl = previewDone.task.model_urls?.glb;
+
+  opts.onStatus?.("Painting hero textures");
+  const refine = await meshyJson<MeshyCreateResponse>(
+    `${MESHY_BASE}/v2/text-to-3d`,
+    {
+      method: "POST",
+      headers: authHeaders(opts.apiKey),
+      body: JSON.stringify({
+        mode: "refine",
+        preview_task_id: preview.data.result,
+        enable_pbr: true,
+        texture_resolution: "2k",
+        target_formats: ["glb"],
+        ai_model: "latest",
+      }),
+    }
+  );
+  if (!refine.ok || !refine.data.result) {
+    if (previewGlbUrl) {
+      return {
+        ok: true,
+        glb: await downloadBinary(previewGlbUrl),
+        refineTaskId: null,
+      };
+    }
+    return { ok: false, error: refine.ok ? "Meshy refine missing id" : refine.error };
+  }
+
+  const refineDone = await pollTask({
+    url: `${MESHY_BASE}/v2/text-to-3d/${refine.data.result}`,
+    apiKey: opts.apiKey,
+    timeoutMs: remainingMs(opts.deadlineAt, opts.timeoutMs ?? 180_000),
+    onProgress: (p, s) => opts.onStatus?.(`Painting hero textures (${p}% ${s})`),
+  });
+  if (!refineDone.ok) {
+    if (previewGlbUrl) {
+      return {
+        ok: true,
+        glb: await downloadBinary(previewGlbUrl),
+        refineTaskId: null,
+      };
+    }
+    return refineDone;
+  }
+
+  const glbUrl = refineDone.task.model_urls?.glb ?? previewGlbUrl;
+  if (!glbUrl) return { ok: false, error: "Meshy refine produced no GLB" };
+
+  return {
+    ok: true,
+    glb: await downloadBinary(glbUrl),
+    refineTaskId: refine.data.result,
+  };
+}
+
+export async function rigHumanoidWalk(opts: {
+  apiKey: string;
+  refineTaskId: string;
+  timeoutMs?: number;
+  deadlineAt?: number;
+  onStatus?: (message: string) => void;
+}): Promise<{ ok: true; glb: Buffer } | { ok: false; error: string }> {
+  opts.onStatus?.("Rigging walk cycle");
+  const created = await meshyJson<MeshyCreateResponse>(`${MESHY_BASE}/v1/rigging`, {
+    method: "POST",
+    headers: authHeaders(opts.apiKey),
+    body: JSON.stringify({
+      input_task_id: opts.refineTaskId,
+      height_meters: 1.78,
+    }),
+  });
+  if (!created.ok || !created.data.result) {
+    return { ok: false, error: created.ok ? "Meshy rig missing id" : created.error };
+  }
+
+  const done = await pollTask({
+    url: `${MESHY_BASE}/v1/rigging/${created.data.result}`,
+    apiKey: opts.apiKey,
+    timeoutMs: remainingMs(opts.deadlineAt, opts.timeoutMs ?? 180_000),
+    onProgress: (p, s) => opts.onStatus?.(`Rigging walk cycle (${p}% ${s})`),
+  });
+  if (!done.ok) return done;
+
+  const walkUrl = done.task.result?.basic_animations?.walking_glb_url;
+  const riggedUrl = done.task.result?.rigged_character_glb_url;
+  const url = walkUrl || riggedUrl;
+  if (!url) return { ok: false, error: "Meshy rig produced no GLB" };
+
+  return { ok: true, glb: await downloadBinary(url) };
 }
 
 /** Build a data-URL Meshy accepts for image_url (jpg/png/webp). */

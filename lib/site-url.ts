@@ -19,6 +19,22 @@ export function websiteDesignPageUrl(slug: string): string {
   return `${getSiteBaseUrl()}/designs/${encodeURIComponent(slug)}`;
 }
 
+export function gameSpecApiUrl(slug: string): string {
+  return `${getSiteBaseUrl()}/api/game-spec/${encodeURIComponent(slug)}`;
+}
+
+export function gameSpecPageUrl(slug: string): string {
+  return `${getSiteBaseUrl()}/specs/${encodeURIComponent(slug)}`;
+}
+
+export function gameAssetsApiUrl(slug: string): string {
+  return `${getSiteBaseUrl()}/api/game-assets/${encodeURIComponent(slug)}`;
+}
+
+export function gameAssetFileUrl(slug: string, filename: string): string {
+  return `${gameAssetsApiUrl(slug)}/${encodeURIComponent(filename)}`;
+}
+
 export function object3dAssetsApiUrl(slug: string): string {
   return `${getSiteBaseUrl()}/api/3d-assets/${encodeURIComponent(slug)}`;
 }

@@ -55,13 +55,15 @@ export function ReversePromptHome({
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const autoSubmitStartedRef = useRef(false);
 
-  /** Home: honor `?mode=website` / `?mode=3d` for shareable entry points. */
+  /** Home: honor `?mode=website`; `?mode=game` redirects to /game. */
   useEffect(() => {
     if (!isHome || typeof window === "undefined") return;
-    const mode = new URLSearchParams(window.location.search)
-      .get("mode")
-      ?.trim()
-      .toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode")?.trim().toLowerCase();
+    if (mode === "game") {
+      void router.replace("/game");
+      return;
+    }
     if (mode === "3d") {
       void router.replace("/3d");
       return;
@@ -117,12 +119,8 @@ export function ReversePromptHome({
     }
   }, []);
 
-  function setHomeModeAndUrl(next: "codebase" | "website" | "3d") {
+  function setHomeModeAndUrl(next: "codebase" | "website") {
     setError(null);
-    if (next === "3d") {
-      void router.push("/3d");
-      return;
-    }
     setHomeMode(next);
     if (typeof window === "undefined" || !isHome) return;
     const url = new URL(window.location.href);
@@ -319,7 +317,13 @@ export function ReversePromptHome({
                 a prompt
               </h1>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Reverse engineer any codebase or website into a prompt.
+                Reverse engineer any codebase or website into a prompt.{" "}
+                <Link
+                  href="/game"
+                  className="font-medium text-zinc-800 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-950"
+                >
+                  Games too.
+                </Link>
               </p>
             </div>
           ) : owner && repo ? (
@@ -360,16 +364,12 @@ export function ReversePromptHome({
               >
                 Website
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={false}
-                aria-pressed={false}
-                onClick={() => setHomeModeAndUrl("3d")}
-                className="bg-transparent px-5 py-2.5 text-sm font-bold text-zinc-600 transition-colors hover:bg-zinc-50"
+              <Link
+                href="/game"
+                className="px-5 py-2.5 text-sm font-bold text-zinc-600 transition-colors hover:bg-zinc-50"
               >
-                3D
-              </button>
+                Game
+              </Link>
             </div>
           ) : null}
 
