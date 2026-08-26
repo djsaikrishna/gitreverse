@@ -238,7 +238,7 @@ export async function generateHeroAssets(opts: {
     let kernel: StoredHeroAsset["kernel"] = null;
     let clips: string[] = [];
     if (item.kind === "humanoid") {
-      opts.onStatus?.("Auto-rigging Quaternius kernel");
+      opts.onStatus?.("Animating character");
       const rig = await autoRigToQuaterniusKernel(sculpt.glb);
       if (rig.ok) {
         bytes = rig.glb;
@@ -246,7 +246,7 @@ export async function generateHeroAssets(opts: {
         hasWalk = rig.clips.includes("Walk_Loop");
         kernel = QUATERNIUS_KERNEL_ID;
         clips = rig.clips;
-        opts.onStatus?.("Quaternius kernel bound (Idle_Loop / Walk_Loop)");
+        opts.onStatus?.("Character is moving");
       } else {
         console.warn(`[game-assets] ${item.id} auto-rig failed: ${rig.error}`);
       }

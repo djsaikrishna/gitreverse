@@ -367,16 +367,6 @@ export function Navbar({ isSubscriber: isSubscriberProp, creditBalance: creditBa
 
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
           <LibraryNavLink isActive={pathname === "/library"} href={libraryHref} />
-          <Link
-            href="/game"
-            className={`text-xs font-bold sm:text-sm ${
-              pathname?.startsWith("/game")
-                ? "text-zinc-900"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            Game
-          </Link>
 
           <NavDivider />
 

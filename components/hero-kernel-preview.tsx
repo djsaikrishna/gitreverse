@@ -14,16 +14,36 @@ type HeroKernelPreviewProps = {
   autoClip?: QuaterniusClip;
 };
 
+function clipLabel(name: string): string {
+  const labels: Record<string, string> = {
+    Idle_Loop: "Idle",
+    Walk_Loop: "Walk",
+    Jog_Fwd_Loop: "Jog",
+    Sprint_Loop: "Run",
+    Jump_Start: "Jump",
+    Jump_Loop: "Jump",
+    Jump_Land: "Land",
+    Crouch_Idle_Loop: "Crouch",
+    Crouch_Fwd_Loop: "Sneak",
+    Punch_Jab: "Punch",
+    Punch_Cross: "Punch",
+    Sword_Attack: "Sword",
+    Death01: "Fall",
+    Dance_Loop: "Dance",
+  };
+  return labels[name] ?? name.replace(/_Loop$/g, "").replace(/_/g, " ").trim();
+}
+
 export function HeroKernelPreview({
   modelUrl,
-  title = "Quaternius kernel",
+  title,
   subtitle,
   autoClip = "Idle_Loop",
 }: HeroKernelPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [clip, setClip] = useState<string>(autoClip);
   const [available, setAvailable] = useState<string[]>([...KERNEL_PREVIEW_CLIPS]);
-  const [status, setStatus] = useState("Loading kernel…");
+  const [status, setStatus] = useState("Loading…");
   const [error, setError] = useState<string | null>(null);
   const playClipRef = useRef<(name: string) => void>(() => {});
 
@@ -47,7 +67,7 @@ export function HeroKernelPreview({
 
     async function boot() {
       setError(null);
-      setStatus("Loading kernel…");
+      setStatus("Loading…");
       const THREE = await import("three");
       const { GLTFLoader } = await import(
         "three/examples/jsm/loaders/GLTFLoader.js"
@@ -133,15 +153,12 @@ export function HeroKernelPreview({
       playClipRef.current = (name: string) => {
         if (!mixer) return;
         const next = actions.get(name);
-        if (!next) {
-          setStatus(`Missing clip ${name}`);
-          return;
-        }
+        if (!next) return;
         for (const action of actions.values()) {
           if (action !== next) action.fadeOut(0.18);
         }
         next.reset().fadeIn(0.18).play();
-        setStatus(name);
+        setStatus("");
       };
 
       const initial =
@@ -152,7 +169,7 @@ export function HeroKernelPreview({
         setClip(initial);
         playClipRef.current(initial);
       } else {
-        setStatus("Loaded mesh, no clips");
+        setStatus("");
       }
 
       const clock = new THREE.Clock();
@@ -198,22 +215,32 @@ export function HeroKernelPreview({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-700">{title}</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {subtitle ?? "Quaternius Universal Animation Library kernel"}
-          </p>
+      {title || subtitle || status || error ? (
+        <div className="flex items-start justify-between gap-3">
+          {title || subtitle ? (
+            <div>
+              {title ? (
+                <h3 className="text-sm font-semibold text-zinc-700">{title}</h3>
+              ) : null}
+              {subtitle ? (
+                <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p>
+              ) : null}
+            </div>
+          ) : (
+            <span />
+          )}
+          {error || status ? (
+            <p className="text-xs font-medium text-zinc-500" role="status">
+              {error ? error : status}
+            </p>
+          ) : null}
         </div>
-        <p className="text-xs font-medium text-zinc-500" role="status">
-          {error ? error : status}
-        </p>
-      </div>
+      ) : null}
       <div className="relative overflow-hidden rounded-lg border-[3px] border-zinc-900 bg-[#f6efe2]">
         <canvas
           ref={canvasRef}
           className="block h-[22rem] w-full"
-          aria-label="Animated hero preview"
+          aria-label="Animated character preview"
         />
       </div>
       {error ? (
@@ -234,7 +261,7 @@ export function HeroKernelPreview({
                   : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-900"
               }`}
             >
-              {name.replace(/_Loop$/, "").replace(/_/g, " ")}
+              {clipLabel(name)}
             </button>
           ))}
         </div>

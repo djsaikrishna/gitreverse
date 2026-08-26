@@ -164,7 +164,7 @@ export async function ensureGameReversed(opts: {
   }
 
   onStatus?.("Understanding mechanics");
-  onStatus?.("Writing GAME.md");
+  onStatus?.("Writing the spec");
   const specStartedAt = Date.now();
   const specResult = await callQuickLlm(
     llm,
