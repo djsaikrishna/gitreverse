@@ -228,3 +228,75 @@ export async function rigHumanoidWalk(opts: {
 
   return { ok: true, glb: await downloadBinary(url) };
 }
+
+/** Build a data-URL Meshy accepts for image_url (jpg/png/webp). */
+export function imageBytesToDataUrl(
+  bytes: Buffer,
+  mimeType: string
+): string {
+  const mime = mimeType.toLowerCase();
+  const safe =
+    mime === "image/jpeg" ||
+    mime === "image/jpg" ||
+    mime === "image/png" ||
+    mime === "image/webp"
+      ? mime === "image/jpg"
+        ? "image/jpeg"
+        : mime
+      : "image/png";
+  return `data:${safe};base64,${bytes.toString("base64")}`;
+}
+
+/**
+ * Image → textured GLB via Meshy Image-to-3D.
+ * `imageUrl` may be a public https URL or a data:image/...;base64,... URL.
+ */
+export async function generateGlbFromImage(opts: {
+  apiKey: string;
+  imageUrl: string;
+  timeoutMs?: number;
+  deadlineAt?: number;
+  onStatus?: (message: string) => void;
+}): Promise<{ ok: true; glb: Buffer; taskId: string } | { ok: false; error: string }> {
+  opts.onStatus?.("Sculpting 3D from image");
+  const created = await meshyJson<MeshyCreateResponse>(
+    `${MESHY_BASE}/v1/image-to-3d`,
+    {
+      method: "POST",
+      headers: authHeaders(opts.apiKey),
+      body: JSON.stringify({
+        image_url: opts.imageUrl,
+        should_texture: true,
+        enable_pbr: true,
+        should_remesh: true,
+        target_polycount: 30000,
+        target_formats: ["glb"],
+        ai_model: "latest",
+      }),
+    }
+  );
+  if (!created.ok || !created.data.result) {
+    return {
+      ok: false,
+      error: created.ok ? "Meshy image-to-3d missing id" : created.error,
+    };
+  }
+
+  const done = await pollTask({
+    url: `${MESHY_BASE}/v1/image-to-3d/${created.data.result}`,
+    apiKey: opts.apiKey,
+    timeoutMs: remainingMs(opts.deadlineAt, opts.timeoutMs ?? 240_000),
+    onProgress: (p, s) =>
+      opts.onStatus?.(`Sculpting 3D from image (${p}% ${s})`),
+  });
+  if (!done.ok) return done;
+
+  const glbUrl = done.task.model_urls?.glb;
+  if (!glbUrl) return { ok: false, error: "Meshy produced no GLB" };
+
+  return {
+    ok: true,
+    glb: await downloadBinary(glbUrl),
+    taskId: created.data.result,
+  };
+}
