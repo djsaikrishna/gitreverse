@@ -199,7 +199,7 @@ export function GameReversePage({ gameSlug, gameName }: GameReversePageProps) {
     void run(slug, parsed.name);
   }
 
-  const isWritingSpec = statusLine === "Writing GAME.md";
+  const isWritingSpec = statusLine === "Writing the spec";
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FFFDF8] text-zinc-900">
@@ -317,23 +317,15 @@ export function GameReversePage({ gameSlug, gameName }: GameReversePageProps) {
                 <h2 className="text-sm font-semibold text-zinc-700">
                   Reverse engineered prompt
                 </h2>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <a
-                    href={`/specs/${encodeURIComponent(currentSlug)}`}
-                    className="text-xs font-medium text-zinc-600 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900 hover:decoration-zinc-900"
+                <div className="group relative shrink-0">
+                  <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
+                  <button
+                    type="button"
+                    onClick={() => void copyPrompt()}
+                    className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-xs font-medium text-zinc-900 transition-transform group-hover:-translate-x-px group-hover:-translate-y-px"
                   >
-                    Open GAME.md
-                  </a>
-                  <div className="group relative">
-                    <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded bg-zinc-900" />
-                    <button
-                      type="button"
-                      onClick={() => void copyPrompt()}
-                      className="relative z-10 rounded border-[3px] border-zinc-900 bg-[#ffc480] px-3 py-1.5 text-xs font-medium text-zinc-900 transition-transform group-hover:-translate-x-px group-hover:-translate-y-px"
-                    >
-                      {copied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
                 </div>
               </div>
               <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-relaxed text-zinc-800">
@@ -343,31 +335,16 @@ export function GameReversePage({ gameSlug, gameName }: GameReversePageProps) {
           </div>
         ) : null}
 
-        {prompt ? (
+        {loading || prompt ? (
           <div className="relative w-full max-w-2xl">
             <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-xl bg-zinc-900" />
             <section className="relative z-10 rounded-xl border-[3px] border-zinc-900 bg-[#fafafa] p-6">
-              {heroAssets.find((a) => a.kind === "humanoid") ? (
-                <HeroKernelPreview
-                  modelUrl={
-                    heroAssets.find((a) => a.kind === "humanoid")?.url ??
-                    undefined
-                  }
-                  title="Generated hero"
-                  subtitle={
-                    heroAssets.find((a) => a.kernel)
-                      ? "Auto-rigged to the Quaternius Universal skeleton"
-                      : "Textured sculpt (kernel bind pending)"
-                  }
-                  autoClip="Walk_Loop"
-                />
-              ) : (
-                <HeroKernelPreview
-                  title="Movement kernel"
-                  subtitle="Generated heroes are auto-rigged onto this Quaternius Universal rig and play these clips"
-                  autoClip="Walk_Loop"
-                />
-              )}
+              <HeroKernelPreview
+                modelUrl={
+                  heroAssets.find((a) => a.kind === "humanoid")?.url ?? undefined
+                }
+                autoClip="Walk_Loop"
+              />
             </section>
           </div>
         ) : null}

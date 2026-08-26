@@ -64,12 +64,6 @@ export default async function GameSpecPage({ params }: PageProps) {
               <div className="mt-4 border-t border-zinc-200 pt-4">
                 <HeroKernelPreview
                   modelUrl={`/api/game-assets/${encodeURIComponent(slug)}/${encodeURIComponent(heroPreview.filename)}`}
-                  title="Generated hero"
-                  subtitle={
-                    heroPreview.kernel
-                      ? "Auto-rigged to the Quaternius Universal skeleton"
-                      : "Textured sculpt"
-                  }
                   autoClip="Walk_Loop"
                 />
               </div>
@@ -91,10 +85,10 @@ export default async function GameSpecPage({ params }: PageProps) {
                       </a>
                       <span className="ml-2 text-xs text-zinc-500">
                         {asset.kernel
-                          ? "Quaternius kernel"
+                          ? "animated"
                           : asset.hasWalk
-                            ? "rigged walk"
-                            : "textured sculpt"}
+                            ? "walks"
+                            : "model"}
                       </span>
                     </li>
                   ))}

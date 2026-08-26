@@ -317,13 +317,7 @@ export function ReversePromptHome({
                 a prompt
               </h1>
               <p className="mt-4 max-w-xl text-lg text-zinc-600">
-                Reverse engineer any codebase or website into a prompt.{" "}
-                <Link
-                  href="/game"
-                  className="font-medium text-zinc-800 underline decoration-zinc-400 underline-offset-2 hover:text-zinc-950"
-                >
-                  Games too.
-                </Link>
+                Reverse engineer any codebase or website into a prompt.
               </p>
             </div>
           ) : owner && repo ? (
