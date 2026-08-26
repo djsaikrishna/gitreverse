@@ -499,9 +499,10 @@ function copyMaterial(
     if (!srcTex) continue;
     let destTex = textureCache.get(srcTex);
     if (!destTex) {
-      destTex = copyTexture(dest, srcTex);
-      if (!destTex) continue;
-      textureCache.set(srcTex, destTex);
+      const copied = copyTexture(dest, srcTex);
+      if (!copied) continue;
+      textureCache.set(srcTex, copied);
+      destTex = copied;
     }
     slot.set(destTex);
   }
