@@ -44,6 +44,7 @@ export const STRIPE_PRICE_IDS = {
   credit: "price_1Tq9A8IBG5KwEK8aYIUW1fVp",
   partner: "price_1TwJ0DIBG5KwEK8ap7Eat9rn",
   readmeSponsor: "price_1U6QY1IBG5KwEK8aeyr0kLAa",
+  footerAd: "price_1U9fddIBG5KwEK8aOptvPcuf",
 } as const;
 
 export const STRIPE_PAYMENT_LINKS = {

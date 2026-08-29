@@ -7,13 +7,10 @@ import {
   type mat4,
   NodeIO,
   type Node as GltfNode,
+  type Texture,
+  type TextureInfo,
 } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
-import {
-  cloneDocument,
-  copyToDocument,
-  prune,
-} from "@gltf-transform/functions";
 import {
   isDeformJoint,
   QUATERNIUS_CLIPS,
@@ -53,7 +50,7 @@ type WorldPrim = {
 
 const MANNEQUIN_HEIGHT = 1.829;
 const INFLUENCE_COUNT = 4;
-const WEIGHT_POWER = 2.2;
+const WEIGHT_POWER = 3.1;
 
 function io(): NodeIO {
   return new NodeIO().registerExtensions(ALL_EXTENSIONS);
@@ -287,77 +284,102 @@ function buildBoneSegments(joints: GltfNode[]): BoneSegment[] {
   return segments;
 }
 
-function regionAllowsBone(p: Vec3, boneName: string): boolean {
+function isArmBone(name: string, side: "l" | "r"): boolean {
+  if (!name.endsWith(`_${side}`)) return false;
+  return (
+    name.includes("arm") ||
+    name.includes("hand") ||
+    name.includes("clavicle") ||
+    name.includes("index") ||
+    name.includes("middle") ||
+    name.includes("ring") ||
+    name.includes("pinky") ||
+    name.includes("thumb")
+  );
+}
+
+function isLegBone(name: string, side: "l" | "r"): boolean {
+  if (!name.endsWith(`_${side}`)) return false;
+  return (
+    name.includes("thigh") ||
+    name.includes("calf") ||
+    name.includes("foot") ||
+    name.includes("ball")
+  );
+}
+
+type BodyPart = "head" | "spine" | "pelvis" | "arm_l" | "arm_r" | "leg_l" | "leg_r";
+
+function classifyVertex(p: Vec3): BodyPart {
   const x = p[0];
   const y = p[1];
+  const z = p[2];
   const absX = Math.abs(x);
+  const absZ = Math.abs(z);
 
-  if (boneName === "pelvis" && y < 0.82) return false;
+  if (y > 1.5 && absX < 0.24 && absZ < 0.22) return "head";
+  if (y < 0.8) return x >= 0 ? "leg_l" : "leg_r";
+  if (y > 0.78 && y < 1.52 && absX > 0.11) return x > 0 ? "arm_l" : "arm_r";
+  if (y < 1.02) return "pelvis";
+  return "spine";
+}
 
-  const isHeadBone = boneName === "Head" || boneName === "neck_01";
-  if (isHeadBone && y < 1.35) return false;
-  if (y > 1.55 && absX < 0.22 && !isHeadBone && !boneName.startsWith("spine")) {
-    return false;
+function partAllowsBone(part: BodyPart, boneName: string): boolean {
+  switch (part) {
+    case "head":
+      return boneName === "Head" || boneName === "neck_01";
+    case "spine":
+      return boneName.startsWith("spine") || boneName === "pelvis" || boneName === "neck_01";
+    case "pelvis":
+      return boneName === "pelvis" || boneName === "spine_01";
+    case "arm_l":
+      return isArmBone(boneName, "l");
+    case "arm_r":
+      return isArmBone(boneName, "r");
+    case "leg_l":
+      return isLegBone(boneName, "l");
+    case "leg_r":
+      return isLegBone(boneName, "r");
   }
+}
 
-  const isLeftArm =
-    boneName.endsWith("_l") &&
-    (boneName.includes("arm") ||
-      boneName.includes("hand") ||
-      boneName.includes("clavicle") ||
-      boneName.includes("index") ||
-      boneName.includes("middle") ||
-      boneName.includes("ring") ||
-      boneName.includes("pinky") ||
-      boneName.includes("thumb"));
-  const isRightArm =
-    boneName.endsWith("_r") &&
-    (boneName.includes("arm") ||
-      boneName.includes("hand") ||
-      boneName.includes("clavicle") ||
-      boneName.includes("index") ||
-      boneName.includes("middle") ||
-      boneName.includes("ring") ||
-      boneName.includes("pinky") ||
-      boneName.includes("thumb"));
+/** Map hanging A-pose arm vertices into T-pose space so they bind to arm bones, not the ribs. */
+function unfoldArm(p: Vec3, side: "l" | "r"): Vec3 {
+  const sx = side === "l" ? 0.14 : -0.14;
+  const sy = 1.4;
+  const dx = p[0] - sx;
+  const dy = p[1] - sy;
+  const dz = p[2];
+  const ux = side === "l" ? -dy : dy;
+  const uy = side === "l" ? dx : -dx;
+  return [sx + ux, sy + uy * 0.2, dz];
+}
 
-  if (absX > 0.28 && y > 1.2 && y < 1.58) {
-    if (x > 0 && !isLeftArm) return false;
-    if (x < 0 && !isRightArm) return false;
-  }
+function detectAPose(_prims: WorldPrim[]): boolean {
+  return false;
+}
 
-  const isLeftLeg =
-    boneName.endsWith("_l") &&
-    (boneName.includes("thigh") ||
-      boneName.includes("calf") ||
-      boneName.includes("foot") ||
-      boneName.includes("ball"));
-  const isRightLeg =
-    boneName.endsWith("_r") &&
-    (boneName.includes("thigh") ||
-      boneName.includes("calf") ||
-      boneName.includes("foot") ||
-      boneName.includes("ball"));
-  if (y < 0.85) {
-    if (x > 0.02 && !isLeftLeg) return false;
-    if (x < -0.02 && !isRightLeg) return false;
-    if (Math.abs(x) <= 0.02 && !isLeftLeg && !isRightLeg) return false;
-  }
-
-  return true;
+function skinQueryPoint(p: Vec3, part: BodyPart, aPose: boolean): Vec3 {
+  if (!aPose) return p;
+  if (part === "arm_l") return unfoldArm(p, "l");
+  if (part === "arm_r") return unfoldArm(p, "r");
+  return p;
 }
 
 function skinVertex(
   p: Vec3,
   segments: BoneSegment[],
-  jointCount: number
+  jointCount: number,
+  aPose: boolean,
 ): { indices: number[]; weights: number[] } {
+  const part = classifyVertex(p);
+  const query = skinQueryPoint(p, part, aPose);
   const best: { index: number; distSq: number }[] = [];
   const seen = new Set<number>();
 
   for (const seg of segments) {
-    if (!regionAllowsBone(p, seg.name)) continue;
-    const d = distPointToSegmentSq(p, seg.a, seg.b);
+    if (!partAllowsBone(part, seg.name)) continue;
+    const d = distPointToSegmentSq(query, seg.a, seg.b);
     if (seen.has(seg.index) && best.find((b) => b.index === seg.index && b.distSq <= d)) {
       continue;
     }
@@ -408,6 +430,112 @@ function copyAccessorArray(
   return dest.createAccessor(name, buffer).setType(type).setArray(copy);
 }
 
+function copyTexture(dest: Document, src: Texture | null): Texture | null {
+  if (!src) return null;
+  const tex = dest.createTexture(src.getName());
+  const image = src.getImage();
+  if (image) tex.setImage(image);
+  const mime = src.getMimeType();
+  if (mime) tex.setMimeType(mime);
+  const uri = src.getURI();
+  if (uri) tex.setURI(uri);
+  return tex;
+}
+
+function copyTexInfo(
+  srcInfo: TextureInfo | null,
+  destInfo: TextureInfo | null
+): void {
+  if (!srcInfo || !destInfo) return;
+  destInfo.setTexCoord(srcInfo.getTexCoord());
+  destInfo.setMagFilter(srcInfo.getMagFilter());
+  destInfo.setMinFilter(srcInfo.getMinFilter());
+  destInfo.setWrapS(srcInfo.getWrapS());
+  destInfo.setWrapT(srcInfo.getWrapT());
+}
+
+function copyMaterial(
+  dest: Document,
+  src: Material,
+  cache: Map<Material, Material>
+): Material {
+  const existing = cache.get(src);
+  if (existing) return existing;
+
+  const m = dest
+    .createMaterial(src.getName())
+    .setBaseColorFactor(src.getBaseColorFactor())
+    .setMetallicFactor(src.getMetallicFactor())
+    .setRoughnessFactor(src.getRoughnessFactor())
+    .setEmissiveFactor(src.getEmissiveFactor())
+    .setAlphaMode(src.getAlphaMode())
+    .setAlphaCutoff(src.getAlphaCutoff())
+    .setDoubleSided(src.getDoubleSided())
+    .setNormalScale(src.getNormalScale())
+    .setOcclusionStrength(src.getOcclusionStrength());
+
+  const slots: Array<{
+    get: () => Texture | null;
+    set: (tex: Texture) => void;
+  }> = [
+    {
+      get: () => src.getBaseColorTexture(),
+      set: (tex) => {
+        m.setBaseColorTexture(tex);
+        copyTexInfo(src.getBaseColorTextureInfo(), m.getBaseColorTextureInfo());
+      },
+    },
+    {
+      get: () => src.getMetallicRoughnessTexture(),
+      set: (tex) => {
+        m.setMetallicRoughnessTexture(tex);
+        copyTexInfo(
+          src.getMetallicRoughnessTextureInfo(),
+          m.getMetallicRoughnessTextureInfo()
+        );
+      },
+    },
+    {
+      get: () => src.getNormalTexture(),
+      set: (tex) => {
+        m.setNormalTexture(tex);
+        copyTexInfo(src.getNormalTextureInfo(), m.getNormalTextureInfo());
+      },
+    },
+    {
+      get: () => src.getOcclusionTexture(),
+      set: (tex) => {
+        m.setOcclusionTexture(tex);
+        copyTexInfo(src.getOcclusionTextureInfo(), m.getOcclusionTextureInfo());
+      },
+    },
+    {
+      get: () => src.getEmissiveTexture(),
+      set: (tex) => {
+        m.setEmissiveTexture(tex);
+        copyTexInfo(src.getEmissiveTextureInfo(), m.getEmissiveTextureInfo());
+      },
+    },
+  ];
+
+  const textureCache = new Map<Texture, Texture>();
+  for (const slot of slots) {
+    const srcTex = slot.get();
+    if (!srcTex) continue;
+    let destTex = textureCache.get(srcTex);
+    if (!destTex) {
+      const copied = copyTexture(dest, srcTex);
+      if (!copied) continue;
+      textureCache.set(srcTex, copied);
+      destTex = copied;
+    }
+    slot.set(destTex);
+  }
+
+  cache.set(src, m);
+  return m;
+}
+
 /**
  * Bind an unrigged (or differently-rigged) mesh onto the Quaternius Universal
  * skeleton and pack the Standard kernel clips into the same GLB.
@@ -426,10 +554,10 @@ export async function autoRigToQuaterniusKernel(
 
   try {
     const reader = io();
-    const kernelDoc = await reader.readBinary(new Uint8Array(kernelBytes));
+    const dest = await reader.readBinary(new Uint8Array(kernelBytes));
     const meshDoc = await reader.readBinary(new Uint8Array(meshBytes));
 
-    const skin = kernelDoc.getRoot().listSkins()[0];
+    const skin = dest.getRoot().listSkins()[0];
     if (!skin) return { ok: false, error: "Quaternius kernel has no skin" };
     const joints = skin.listJoints();
     if (joints.length !== QUATERNIUS_JOINT_COUNT) {
@@ -478,23 +606,15 @@ export async function autoRigToQuaterniusKernel(
       }
     }
 
-    const dest = cloneDocument(kernelDoc);
     dest.setLogger(new Logger(Logger.Verbosity.ERROR));
     dest.getRoot().getAsset().generator = "gitreverse-quaternius-kernel";
-    const destSkin = dest.getRoot().listSkins()[0];
-    const destJoints = destSkin.listJoints();
+    const destJoints = skin.listJoints();
     const segments = buildBoneSegments(destJoints);
+    const aPose = detectAPose(prims);
     const destBuffer =
       dest.getRoot().listBuffers()[0] ?? dest.createBuffer("kernel");
 
-    const materialMap = copyToDocument(
-      dest,
-      meshDoc,
-      meshDoc
-        .getRoot()
-        .listMaterials()
-        .filter(Boolean)
-    );
+    const materialMap = new Map<Material, Material>();
 
     const heroMesh = dest.createMesh("Hero");
     let vertexCount = 0;
@@ -510,7 +630,7 @@ export async function autoRigToQuaterniusKernel(
           prim.positions[i * 3 + 1],
           prim.positions[i * 3 + 2],
         ];
-        const skinned = skinVertex(p, segments, destJoints.length);
+        const skinned = skinVertex(p, segments, destJoints.length, aPose);
         for (let k = 0; k < 4; k++) {
           jointsArr[i * 4 + k] = skinned.indices[k];
           weightsArr[i * 4 + k] = skinned.weights[k];
@@ -584,10 +704,7 @@ export async function autoRigToQuaterniusKernel(
         );
       }
       if (prim.material) {
-        const copied = materialMap.get(prim.material);
-        if (copied && copied.propertyType === "Material") {
-          destPrim.setMaterial(copied as Material);
-        }
+        destPrim.setMaterial(copyMaterial(dest, prim.material, materialMap));
       }
       heroMesh.addPrimitive(destPrim);
     });
@@ -595,10 +712,10 @@ export async function autoRigToQuaterniusKernel(
     let bound = false;
     for (const node of dest.getRoot().listNodes()) {
       const mesh = node.getMesh();
-      if (mesh && (mesh.getName() === "Mannequin" || node.getSkin() === destSkin)) {
+        if (mesh && (mesh.getName() === "Mannequin" || node.getSkin() === skin)) {
         const old = mesh;
         node.setMesh(heroMesh);
-        node.setSkin(destSkin);
+        node.setSkin(skin);
         if (old && old !== heroMesh) old.dispose();
         bound = true;
       }
@@ -607,12 +724,10 @@ export async function autoRigToQuaterniusKernel(
       const armature =
         dest.getRoot().listNodes().find((n) => n.getName() === "Armature") ??
         dest.getRoot().listNodes()[0];
-      const heroNode = dest.createNode("Hero").setMesh(heroMesh).setSkin(destSkin);
+      const heroNode = dest.createNode("Hero").setMesh(heroMesh).setSkin(skin);
       if (armature) armature.addChild(heroNode);
       else dest.getRoot().listScenes()[0]?.addChild(heroNode);
     }
-
-    await dest.transform(prune({ keepLeaves: true }));
 
     const clips = dest
       .getRoot()
