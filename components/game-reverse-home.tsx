@@ -136,30 +136,6 @@ export function GameReverseHome() {
           </div>
         </div>
       </main>
-
-      <footer className="border-t border-zinc-200 py-6 text-center text-sm text-zinc-500">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-2 px-4 sm:px-6">
-          <a
-            href="https://github.com/filiksyos/gitreverse"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-900"
-          >
-            GitHub
-          </a>
-          <span className="text-zinc-300" aria-hidden>
-            ·
-          </span>
-          <a
-            href="https://discord.gg/AYnCD68WCr"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 font-medium text-zinc-700 underline decoration-zinc-400 underline-offset-2 transition-colors hover:text-zinc-900"
-          >
-            Discord
-          </a>
-        </div>
-      </footer>
     </div>
   );
 }

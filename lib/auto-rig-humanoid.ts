@@ -50,7 +50,7 @@ type WorldPrim = {
 
 const MANNEQUIN_HEIGHT = 1.829;
 const INFLUENCE_COUNT = 4;
-const WEIGHT_POWER = 2.2;
+const WEIGHT_POWER = 3.1;
 
 function io(): NodeIO {
   return new NodeIO().registerExtensions(ALL_EXTENSIONS);
@@ -284,77 +284,102 @@ function buildBoneSegments(joints: GltfNode[]): BoneSegment[] {
   return segments;
 }
 
-function regionAllowsBone(p: Vec3, boneName: string): boolean {
+function isArmBone(name: string, side: "l" | "r"): boolean {
+  if (!name.endsWith(`_${side}`)) return false;
+  return (
+    name.includes("arm") ||
+    name.includes("hand") ||
+    name.includes("clavicle") ||
+    name.includes("index") ||
+    name.includes("middle") ||
+    name.includes("ring") ||
+    name.includes("pinky") ||
+    name.includes("thumb")
+  );
+}
+
+function isLegBone(name: string, side: "l" | "r"): boolean {
+  if (!name.endsWith(`_${side}`)) return false;
+  return (
+    name.includes("thigh") ||
+    name.includes("calf") ||
+    name.includes("foot") ||
+    name.includes("ball")
+  );
+}
+
+type BodyPart = "head" | "spine" | "pelvis" | "arm_l" | "arm_r" | "leg_l" | "leg_r";
+
+function classifyVertex(p: Vec3): BodyPart {
   const x = p[0];
   const y = p[1];
+  const z = p[2];
   const absX = Math.abs(x);
+  const absZ = Math.abs(z);
 
-  if (boneName === "pelvis" && y < 0.82) return false;
+  if (y > 1.5 && absX < 0.24 && absZ < 0.22) return "head";
+  if (y < 0.8) return x >= 0 ? "leg_l" : "leg_r";
+  if (y > 0.78 && y < 1.52 && absX > 0.11) return x > 0 ? "arm_l" : "arm_r";
+  if (y < 1.02) return "pelvis";
+  return "spine";
+}
 
-  const isHeadBone = boneName === "Head" || boneName === "neck_01";
-  if (isHeadBone && y < 1.35) return false;
-  if (y > 1.55 && absX < 0.22 && !isHeadBone && !boneName.startsWith("spine")) {
-    return false;
+function partAllowsBone(part: BodyPart, boneName: string): boolean {
+  switch (part) {
+    case "head":
+      return boneName === "Head" || boneName === "neck_01";
+    case "spine":
+      return boneName.startsWith("spine") || boneName === "pelvis" || boneName === "neck_01";
+    case "pelvis":
+      return boneName === "pelvis" || boneName === "spine_01";
+    case "arm_l":
+      return isArmBone(boneName, "l");
+    case "arm_r":
+      return isArmBone(boneName, "r");
+    case "leg_l":
+      return isLegBone(boneName, "l");
+    case "leg_r":
+      return isLegBone(boneName, "r");
   }
+}
 
-  const isLeftArm =
-    boneName.endsWith("_l") &&
-    (boneName.includes("arm") ||
-      boneName.includes("hand") ||
-      boneName.includes("clavicle") ||
-      boneName.includes("index") ||
-      boneName.includes("middle") ||
-      boneName.includes("ring") ||
-      boneName.includes("pinky") ||
-      boneName.includes("thumb"));
-  const isRightArm =
-    boneName.endsWith("_r") &&
-    (boneName.includes("arm") ||
-      boneName.includes("hand") ||
-      boneName.includes("clavicle") ||
-      boneName.includes("index") ||
-      boneName.includes("middle") ||
-      boneName.includes("ring") ||
-      boneName.includes("pinky") ||
-      boneName.includes("thumb"));
+/** Map hanging A-pose arm vertices into T-pose space so they bind to arm bones, not the ribs. */
+function unfoldArm(p: Vec3, side: "l" | "r"): Vec3 {
+  const sx = side === "l" ? 0.14 : -0.14;
+  const sy = 1.4;
+  const dx = p[0] - sx;
+  const dy = p[1] - sy;
+  const dz = p[2];
+  const ux = side === "l" ? -dy : dy;
+  const uy = side === "l" ? dx : -dx;
+  return [sx + ux, sy + uy * 0.2, dz];
+}
 
-  if (absX > 0.28 && y > 1.2 && y < 1.58) {
-    if (x > 0 && !isLeftArm) return false;
-    if (x < 0 && !isRightArm) return false;
-  }
+function detectAPose(_prims: WorldPrim[]): boolean {
+  return false;
+}
 
-  const isLeftLeg =
-    boneName.endsWith("_l") &&
-    (boneName.includes("thigh") ||
-      boneName.includes("calf") ||
-      boneName.includes("foot") ||
-      boneName.includes("ball"));
-  const isRightLeg =
-    boneName.endsWith("_r") &&
-    (boneName.includes("thigh") ||
-      boneName.includes("calf") ||
-      boneName.includes("foot") ||
-      boneName.includes("ball"));
-  if (y < 0.85) {
-    if (x > 0.02 && !isLeftLeg) return false;
-    if (x < -0.02 && !isRightLeg) return false;
-    if (Math.abs(x) <= 0.02 && !isLeftLeg && !isRightLeg) return false;
-  }
-
-  return true;
+function skinQueryPoint(p: Vec3, part: BodyPart, aPose: boolean): Vec3 {
+  if (!aPose) return p;
+  if (part === "arm_l") return unfoldArm(p, "l");
+  if (part === "arm_r") return unfoldArm(p, "r");
+  return p;
 }
 
 function skinVertex(
   p: Vec3,
   segments: BoneSegment[],
-  jointCount: number
+  jointCount: number,
+  aPose: boolean,
 ): { indices: number[]; weights: number[] } {
+  const part = classifyVertex(p);
+  const query = skinQueryPoint(p, part, aPose);
   const best: { index: number; distSq: number }[] = [];
   const seen = new Set<number>();
 
   for (const seg of segments) {
-    if (!regionAllowsBone(p, seg.name)) continue;
-    const d = distPointToSegmentSq(p, seg.a, seg.b);
+    if (!partAllowsBone(part, seg.name)) continue;
+    const d = distPointToSegmentSq(query, seg.a, seg.b);
     if (seen.has(seg.index) && best.find((b) => b.index === seg.index && b.distSq <= d)) {
       continue;
     }
@@ -585,6 +610,7 @@ export async function autoRigToQuaterniusKernel(
     dest.getRoot().getAsset().generator = "gitreverse-quaternius-kernel";
     const destJoints = skin.listJoints();
     const segments = buildBoneSegments(destJoints);
+    const aPose = detectAPose(prims);
     const destBuffer =
       dest.getRoot().listBuffers()[0] ?? dest.createBuffer("kernel");
 
@@ -604,7 +630,7 @@ export async function autoRigToQuaterniusKernel(
           prim.positions[i * 3 + 1],
           prim.positions[i * 3 + 2],
         ];
-        const skinned = skinVertex(p, segments, destJoints.length);
+        const skinned = skinVertex(p, segments, destJoints.length, aPose);
         for (let k = 0; k < 4; k++) {
           jointsArr[i * 4 + k] = skinned.indices[k];
           weightsArr[i * 4 + k] = skinned.weights[k];
